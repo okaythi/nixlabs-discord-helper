@@ -66,6 +66,22 @@ func (s *Server) handleQuestCancel(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
+func (s *Server) handleQuestProgress(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		return
+	}
+	if !s.questEngine.HasToken() {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "discord_token_unavailable"})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(s.questEngine.CurrentProgress())
+}
+
 func (s *Server) handleQuestEvents(w http.ResponseWriter, r *http.Request) {
 	if !s.questEngine.HasToken() {
 		http.Error(w, `{"error":"discord_token_unavailable"}`, http.StatusUnauthorized)

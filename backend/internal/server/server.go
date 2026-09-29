@@ -49,6 +49,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/quests/complete-all", s.handleQuestCompleteAll)
 	mux.HandleFunc("/api/quests/cancel", s.handleQuestCancel)
 	mux.HandleFunc("/api/quests/events", s.handleQuestEvents)
+	mux.HandleFunc("/api/quests/progress", s.handleQuestProgress)
 
 	// ── SPA Static Assets with HTML5 History Fallback ──
 	fileServer := http.FileServer(http.FS(s.distFS))

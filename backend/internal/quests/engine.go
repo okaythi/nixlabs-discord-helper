@@ -88,6 +88,17 @@ func (e *Engine) HasToken() bool {
 	return e.tokenDigest != [32]byte{}
 }
 
+// CurrentProgress gives clients a snapshot when the event stream is delayed or
+// a window connects after a quest has already started.
+func (e *Engine) CurrentProgress() ProgressEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.currentEvent == nil {
+		return ProgressEvent{}
+	}
+	return *e.currentEvent
+}
+
 func (e *Engine) loadCacheFromDisk() {
 	cachePath := filepath.Join(config.GetConfigDir(), "quests_cache.json")
 	dataBytes, err := os.ReadFile(cachePath)

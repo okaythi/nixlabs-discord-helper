@@ -5,6 +5,7 @@ import { cacheKey, clearRefreshCache, readRefreshCache, writeRefreshCache, REFRE
 import { discordTokenErrorMessage, formatQuestType } from '../i18n';
 import {
   getQuests,
+  getQuestProgress,
   completeQuest,
   completeAllQuests,
   cancelQuest,
@@ -31,6 +32,7 @@ export const QuestsView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [activeProgress, setActiveProgress] = useState<QuestProgressEvent | null>(null);
+  const [isTrackingProgress, setIsTrackingProgress] = useState(false);
   const [isStartingQuestId, setIsStartingQuestId] = useState<string | null>(null);
   const [isStartingAll, setIsStartingAll] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
@@ -113,51 +115,92 @@ export const QuestsView: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const unsubscribe = subscribeQuestProgress((event) => {
-      setActiveProgress(event);
-      if (event.error) setError(event.error);
-      if (event.quest_id && !event.estimated) {
-        setQuests((current) => {
-          const updated = current.map((quest) => quest.id === event.quest_id
-            ? { ...quest, seconds_done: Math.max(quest.seconds_done, event.seconds_done),
-                enrolled: true, completed: quest.completed || event.completed }
-            : quest);
-          if (storageKey && updated.some((quest, index) => quest !== current[index])) {
-            const cached = readRefreshCache<Quest[]>(storageKey);
-            writeRefreshCache(storageKey, { ...cached, value: updated });
-          }
-          return updated;
-        });
-      }
-      if (!event.running) {
-        setIsStartingQuestId(null);
-        setIsStartingAll(false);
-        setIsStopping(false);
-      }
-    });
-    return unsubscribe;
+  const applyProgressEvent = useCallback((event: QuestProgressEvent) => {
+    if (!event.running && !event.status_text && !event.error) return;
+    setActiveProgress(event);
+    setIsTrackingProgress(event.running);
+    if (event.error) setError(event.error);
+    if (event.quest_id && !event.estimated) {
+      setQuests((current) => {
+        const updated = current.map((quest) => quest.id === event.quest_id
+          ? { ...quest, seconds_done: Math.max(quest.seconds_done, event.seconds_done),
+              enrolled: true, completed: quest.completed || event.completed }
+          : quest);
+        if (storageKey && updated.some((quest, index) => quest !== current[index])) {
+          const cached = readRefreshCache<Quest[]>(storageKey);
+          writeRefreshCache(storageKey, { ...cached, value: updated });
+        }
+        return updated;
+      });
+    }
+    if (!event.running) {
+      setIsStartingQuestId(null);
+      setIsStartingAll(false);
+      setIsStopping(false);
+    }
   }, [storageKey]);
 
+  useEffect(() => subscribeQuestProgress(applyProgressEvent), [applyProgressEvent]);
+
+  useEffect(() => {
+    if (!discordId) return;
+    let active = true;
+    getQuestProgress().then((event) => {
+      if (active) applyProgressEvent(event);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [discordId, applyProgressEvent]);
+
+  useEffect(() => {
+    if (!isTrackingProgress) return;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        applyProgressEvent(await getQuestProgress());
+      } catch {
+        // Keep the last known state; the next poll can recover the stream.
+      } finally {
+        inFlight = false;
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isTrackingProgress, applyProgressEvent]);
+
   const handleStartSingleQuest = async (questId: string) => {
+    const quest = quests.find((item) => item.id === questId);
     setIsStartingQuestId(questId);
+    setActiveProgress({
+      quest_id: questId, quest_name: quest?.name || '', task_type: quest?.task_type || '',
+      seconds_done: 0, seconds_needed: 0, percent: 0,
+      status_text: t('loadingDetails'), running: true, completed: false,
+    });
     setError(null);
     try {
       await completeQuest(questId);
+      setIsTrackingProgress(true);
     } catch (err: any) {
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start quest');
       setIsStartingQuestId(null);
+      setActiveProgress(null);
     }
   };
 
   const handleStartAllQuests = async () => {
     setIsStartingAll(true);
+    setActiveProgress({
+      quest_id: '', quest_name: '', task_type: '', seconds_done: 0, seconds_needed: 0,
+      percent: 0, status_text: t('loadingDetails'), running: true, completed: false,
+    });
     setError(null);
     try {
       await completeAllQuests();
+      setIsTrackingProgress(true);
     } catch (err: any) {
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start all quests');
       setIsStartingAll(false);
+      setActiveProgress(null);
     }
   };
 

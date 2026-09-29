@@ -54,6 +54,22 @@ func questJSON(t *testing.T, value string) map[string]interface{} {
 	return q
 }
 
+func TestCurrentProgressSnapshot(t *testing.T) {
+	engine := NewEngine(discord.NewClient())
+	if engine.CurrentProgress().Running {
+		t.Fatal("new engine should be idle")
+	}
+	engine.broadcast(ProgressEvent{QuestID: "quest-1", SecondsDone: 12, Running: true})
+	snapshot := engine.CurrentProgress()
+	if !snapshot.Running || snapshot.QuestID != "quest-1" || snapshot.SecondsDone != 12 {
+		t.Fatalf("unexpected snapshot: %+v", snapshot)
+	}
+	snapshot.SecondsDone = 99
+	if engine.CurrentProgress().SecondsDone != 12 {
+		t.Fatal("snapshot must not mutate stored progress")
+	}
+}
+
 func TestRejectedProgressNeverCompletes(t *testing.T) {
 	setHandler(t, func(*http.Request) (*http.Response, error) { return mockResponse(403, `{"message":"rejected"}`), nil })
 	for _, kind := range []string{"WATCH_VIDEO", "PLAY_ON_DESKTOP", "PLAY_ACTIVITY"} {

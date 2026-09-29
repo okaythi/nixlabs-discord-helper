@@ -6,6 +6,10 @@ export async function getQuests(forceRefresh = false): Promise<{ quests: Quest[]
   return apiRequest<{ quests: Quest[] }>(url);
 }
 
+export async function getQuestProgress(): Promise<QuestProgressEvent> {
+  return apiRequest<QuestProgressEvent>('/api/quests/progress');
+}
+
 export async function completeQuest(questId: string): Promise<{ success: boolean; message?: string }> {
   return apiRequest<{ success: boolean; message?: string }>('/api/quests/complete', {
     method: 'POST',
