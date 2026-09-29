@@ -27,6 +27,7 @@ export const QuestsView: React.FC = () => {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasQuestAccess, setHasQuestAccess] = useState(false);
 
   const [activeProgress, setActiveProgress] = useState<QuestProgressEvent | null>(null);
   const [isStartingQuestId, setIsStartingQuestId] = useState<string | null>(null);
@@ -51,11 +52,13 @@ export const QuestsView: React.FC = () => {
       }
 
       const res = await getQuests(shouldForceRefresh);
+      setHasQuestAccess(true);
       setQuests(res.quests || []);
       if (shouldForceRefresh) {
         localStorage.setItem(QUESTS_LAST_REFRESH_KEY, String(Date.now()));
       }
     } catch (err: any) {
+      setHasQuestAccess(false);
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to load quests');
     } finally {
       setIsLoading(false);
@@ -68,6 +71,7 @@ export const QuestsView: React.FC = () => {
 
   // Subscribe to real-time progress events from the Go quest engine
   useEffect(() => {
+    if (!hasQuestAccess) return;
     const unsubscribe = subscribeQuestProgress((event) => {
       setActiveProgress(event);
 
@@ -83,7 +87,7 @@ export const QuestsView: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [fetchQuestsList]);
+  }, [fetchQuestsList, hasQuestAccess]);
 
   const handleStartSingleQuest = async (questId: string) => {
     setIsStartingQuestId(questId);
