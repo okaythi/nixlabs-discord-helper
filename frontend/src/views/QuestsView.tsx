@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useI18n } from '../context/I18nContext';
+import { useAuth } from '../context/AuthContext';
+import { cacheKey, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
 import { discordTokenErrorMessage, formatQuestType } from '../i18n';
 import {
   getQuests,
@@ -20,6 +22,8 @@ import {
 
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const storageKey = user ? cacheKey('quests', user.id || user.handle) : null;
 
   const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,46 +34,73 @@ export const QuestsView: React.FC = () => {
   const [isStartingAll, setIsStartingAll] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
+  const [checkedAt, setCheckedAt] = useState(0);
+
   const fetchQuestsList = useCallback(async (explicitRefresh = false) => {
-    setIsLoading(true);
+    if (!storageKey) return;
+    const cached = readRefreshCache<Quest[]>(storageKey);
+    if (!explicitRefresh && Date.now() - cached.checkedAt < REFRESH_INTERVAL_MS) return;
+    const now = Date.now();
+    writeRefreshCache(storageKey, { ...cached, checkedAt: now });
+    setCheckedAt(now);
+    setIsLoading(cached.value === null);
     setError(null);
     try {
-      const res = await getQuests(explicitRefresh);
-      setQuests(res.quests || []);
+      const res = await getQuests(true);
+      const next = res.quests || [];
+      setQuests(next);
+      writeRefreshCache(storageKey, { checkedAt: now, value: next });
     } catch (err: any) {
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to load quests');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [storageKey, t]);
 
   useEffect(() => {
-    fetchQuestsList(true);
-    const timer = window.setInterval(() => fetchQuestsList(true), 60_000);
-    return () => window.clearInterval(timer);
-  }, [fetchQuestsList]);
+    if (!storageKey) return;
+    const cached = readRefreshCache<Quest[]>(storageKey);
+    setQuests(cached.value || []);
+    setCheckedAt(cached.checkedAt);
+    setIsLoading(cached.value === null && cached.checkedAt === 0);
+  }, [storageKey]);
 
-  // Subscribe to real-time progress events from the Go quest engine
+  useEffect(() => {
+    if (!storageKey || activeProgress?.running) return;
+    const remaining = Math.max(0, readRefreshCache<Quest[]>(storageKey).checkedAt + REFRESH_INTERVAL_MS - Date.now());
+    if (remaining === 0) {
+      void fetchQuestsList();
+      return;
+    }
+    const timer = window.setTimeout(() => void fetchQuestsList(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [storageKey, checkedAt, activeProgress?.running, fetchQuestsList]);
+
   useEffect(() => {
     const unsubscribe = subscribeQuestProgress((event) => {
       setActiveProgress(event);
       if (event.error) setError(event.error);
-
-      // Refresh server status after completion or cancellation.
+      if (event.quest_id && !event.estimated) {
+        setQuests((current) => {
+          const updated = current.map((quest) => quest.id === event.quest_id
+            ? { ...quest, seconds_done: Math.max(quest.seconds_done, event.seconds_done),
+                enrolled: true, completed: quest.completed || event.completed }
+            : quest);
+          if (storageKey && updated.some((quest, index) => quest !== current[index])) {
+            const cached = readRefreshCache<Quest[]>(storageKey);
+            writeRefreshCache(storageKey, { ...cached, value: updated });
+          }
+          return updated;
+        });
+      }
       if (!event.running) {
         setIsStartingQuestId(null);
         setIsStartingAll(false);
         setIsStopping(false);
-        fetchQuestsList(true).then(() => {
-          if (event.error) setError(event.error);
-        });
       }
     });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [fetchQuestsList]);
+    return unsubscribe;
+  }, [storageKey]);
 
   const handleStartSingleQuest = async (questId: string) => {
     setIsStartingQuestId(questId);
