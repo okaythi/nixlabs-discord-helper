@@ -19,6 +19,13 @@ type Client struct {
 	httpClient  *http.Client
 	buildNumber int
 	superProps  string
+	token       string
+}
+
+func (c *Client) SetToken(token string) {
+	c.mu.Lock()
+	c.token = token
+	c.mu.Unlock()
 }
 
 func NewClient() *Client {
@@ -115,12 +122,16 @@ func (c *Client) NewUserRequest(method, path string, body io.Reader) (*http.Requ
 
 	c.mu.RLock()
 	sp := c.superProps
+	token := c.token
 	if sp == "" {
 		sp = buildSuperProperties(c.buildNumber)
 	}
 	c.mu.RUnlock()
+	if token == "" {
+		return nil, fmt.Errorf("Discord token unavailable")
+	}
 
-	req.Header.Set("Authorization", config.HardcodedUserToken)
+	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")

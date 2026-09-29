@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useI18n } from '../context/I18nContext';
-import { formatQuestType } from '../i18n';
+import { discordTokenErrorMessage, formatQuestType } from '../i18n';
 import {
   getQuests,
   completeQuest,
@@ -56,7 +56,7 @@ export const QuestsView: React.FC = () => {
         localStorage.setItem(QUESTS_LAST_REFRESH_KEY, String(Date.now()));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load quests');
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to load quests');
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export const QuestsView: React.FC = () => {
     try {
       await completeQuest(questId);
     } catch (err: any) {
-      setError(err?.message || 'Failed to start quest');
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start quest');
       setIsStartingQuestId(null);
     }
   };
@@ -102,7 +102,7 @@ export const QuestsView: React.FC = () => {
     try {
       await completeAllQuests();
     } catch (err: any) {
-      setError(err?.message || 'Failed to start all quests');
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start all quests');
       setIsStartingAll(false);
     }
   };

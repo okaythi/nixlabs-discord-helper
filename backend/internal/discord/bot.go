@@ -3,48 +3,44 @@ package discord
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"time"
-
-	"nixlabs-discord-helper/internal/config"
 )
 
 type UserProfile struct {
-	ID                 string  `json:"id"`
-	Username           string  `json:"username"`
-	GlobalName         string  `json:"global_name"`
-	Avatar             string  `json:"avatar"`
-	AvatarURL          string  `json:"avatar_url"`
-	Banner             string  `json:"banner"`
-	BannerURL          string  `json:"banner_url"`
-	BannerColor        string  `json:"banner_color"`
-	AccentColor        *int    `json:"accent_color"`
-	CreatedAt          string  `json:"created_at"`
-	CreatedAtTimestamp int64   `json:"created_at_timestamp"`
+	ID                 string `json:"id"`
+	Username           string `json:"username"`
+	GlobalName         string `json:"global_name"`
+	Avatar             string `json:"avatar"`
+	AvatarURL          string `json:"avatar_url"`
+	Banner             string `json:"banner"`
+	BannerURL          string `json:"banner_url"`
+	BannerColor        string `json:"banner_color"`
+	AccentColor        *int   `json:"accent_color"`
+	CreatedAt          string `json:"created_at"`
+	CreatedAtTimestamp int64  `json:"created_at_timestamp"`
 }
 
-// FetchUserProfileViaBot queries Discord Bot API and computes snowflake metadata.
-func FetchUserProfileViaBot() (*UserProfile, error) {
+// FetchUserProfile queries the currently authenticated user's own Discord profile.
+func FetchUserProfile(token string) (*UserProfile, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	url := fmt.Sprintf("%s/users/%s", config.DiscordBotAPIBase, config.HardcodedUserID)
+	url := "https://discord.com/api/v10/users/@me"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bot %s", config.BotToken))
+	req.Header.Set("Authorization", token)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to contact Discord Bot API: %w", err)
+		return nil, fmt.Errorf("failed to contact Discord: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("discord Bot API error %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("Discord profile request failed (%d)", resp.StatusCode)
 	}
 
 	var dUser map[string]interface{}

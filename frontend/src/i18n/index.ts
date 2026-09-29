@@ -48,3 +48,9 @@ export function formatQuestType(type: string, t: (key: keyof Translations) => st
   return type;
 }
 
+export function discordTokenErrorMessage(error: unknown, t: (key: keyof Translations) => string): string | null {
+  if (!(error instanceof Error)) return null;
+  if (error.message === 'discord_token_missing') return t('discordTokenMissing');
+  if (error.message === 'discord_token_invalid') return t('discordTokenInvalid');
+  return null;
+}

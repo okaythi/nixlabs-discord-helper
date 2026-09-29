@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,13 @@ type Manager struct {
 	auth   *StoredAuth
 	client *http.Client
 }
+
+var (
+	ErrNotAuthenticated        = errors.New("Nixlabs session is not authenticated")
+	ErrDiscordTokenMissing     = errors.New("Discord token has not been provided")
+	ErrDiscordTokenInvalid     = errors.New("Discord token is invalid")
+	ErrDiscordTokenUnavailable = errors.New("Discord token service is unavailable")
+)
 
 func NewManager() *Manager {
 	m := &Manager{
@@ -55,7 +63,9 @@ func (m *Manager) Save(a *StoredAuth) {
 
 	if a != nil {
 		data, _ := json.MarshalIndent(a, "", "  ")
-		_ = os.WriteFile(config.GetAuthFilePath(), data, 0600)
+		path := config.GetAuthFilePath()
+		_ = os.WriteFile(path, data, 0600)
+		_ = os.Chmod(path, 0600)
 	} else {
 		_ = os.Remove(config.GetAuthFilePath())
 	}
@@ -66,7 +76,7 @@ func (m *Manager) GetSession() (bool, map[string]interface{}, map[string]interfa
 	a := m.auth
 	m.mu.RUnlock()
 
-	if a == nil || (a.SessionCookie == "" && a.User == nil) {
+	if a == nil || a.SessionCookie == "" {
 		return false, nil, nil
 	}
 
@@ -88,10 +98,12 @@ func (m *Manager) GetSession() (bool, map[string]interface{}, map[string]interfa
 						}
 						accObj, _ := profileResp["account"].(map[string]interface{})
 
-						a.User = userObj
-						a.Account = accObj
-						a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-						m.Save(a)
+						m.Save(&StoredAuth{
+							SessionCookie: a.SessionCookie,
+							User:          userObj,
+							Account:       accObj,
+							UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+						})
 
 						return true, userObj, accObj
 					}
@@ -100,10 +112,48 @@ func (m *Manager) GetSession() (bool, map[string]interface{}, map[string]interfa
 		}
 	}
 
-	if a.User != nil {
-		return true, a.User, a.Account
-	}
 	return false, nil, nil
+}
+
+// GetDiscordToken verifies the live Nixlabs session before explicitly requesting
+// the caller's Discord token. The token is returned only to the local backend.
+func (m *Manager) GetDiscordToken() (string, error) {
+	if ok, _, _ := m.GetSession(); !ok {
+		return "", ErrNotAuthenticated
+	}
+	m.mu.RLock()
+	a := m.auth
+	m.mu.RUnlock()
+	if a == nil || a.SessionCookie == "" {
+		return "", ErrNotAuthenticated
+	}
+	req, err := http.NewRequest(http.MethodPost, config.AccountsAPIBase+"/api/third-party-auth/discord-helper/reveal", nil)
+	if err != nil {
+		return "", ErrDiscordTokenUnavailable
+	}
+	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Accept", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return "", ErrDiscordTokenUnavailable
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return "", ErrDiscordTokenMissing
+	case http.StatusUnprocessableEntity:
+		return "", ErrDiscordTokenInvalid
+	case http.StatusOK:
+		var body struct {
+			Token string `json:"token"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&body) != nil || body.Token == "" {
+			return "", ErrDiscordTokenUnavailable
+		}
+		return body.Token, nil
+	default:
+		return "", ErrDiscordTokenUnavailable
+	}
 }
 
 func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{}, map[string]interface{}, error) {

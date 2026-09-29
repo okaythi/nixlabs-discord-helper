@@ -2,6 +2,7 @@ package quests
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ type Engine struct {
 	activeCancel context.CancelFunc
 	isRunning    bool
 	currentEvent *ProgressEvent
+	tokenDigest  [32]byte
 
 	cacheMu      sync.RWMutex
 	cachedQuests []QuestNormalized
@@ -47,8 +49,38 @@ func NewEngine(client *discord.Client) *Engine {
 		subscribers: make(map[chan ProgressEvent]bool),
 	}
 	e.runner = NewTaskRunner(client, e.broadcast)
-	e.loadCacheFromDisk()
 	return e
+}
+
+func (e *Engine) SetToken(token string) {
+	digest := sha256.Sum256([]byte(token))
+	e.mu.Lock()
+	changed := e.tokenDigest != digest
+	if changed {
+		e.tokenDigest = digest
+		e.client.SetToken(token)
+	}
+	e.mu.Unlock()
+	if changed {
+		e.cacheMu.Lock()
+		e.cachedQuests = nil
+		e.cachedRaw = nil
+		e.cacheExpiry = time.Time{}
+		e.cacheMu.Unlock()
+	}
+}
+
+func (e *Engine) ClearToken() {
+	e.CancelRunning()
+	e.client.SetToken("")
+	e.mu.Lock()
+	e.tokenDigest = [32]byte{}
+	e.mu.Unlock()
+	e.cacheMu.Lock()
+	e.cachedQuests = nil
+	e.cachedRaw = nil
+	e.cacheExpiry = time.Time{}
+	e.cacheMu.Unlock()
 }
 
 func (e *Engine) loadCacheFromDisk() {

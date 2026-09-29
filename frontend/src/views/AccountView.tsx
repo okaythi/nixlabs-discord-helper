@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ISO6391 from 'iso-639-1';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
+import { discordTokenErrorMessage } from '../i18n';
 import { getDiscordUser } from '../api/discordApi';
 import type { DiscordUser } from '../types/discord';
 import { Avatar } from '../components/common/Avatar';
@@ -23,7 +24,7 @@ export const AccountView: React.FC = () => {
       const data = await getDiscordUser();
       setDiscordUser(data);
     } catch (err: any) {
-      setError(err?.message || 'Failed to fetch Discord user profile');
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to fetch Discord user profile');
     } finally {
       setIsLoading(false);
     }

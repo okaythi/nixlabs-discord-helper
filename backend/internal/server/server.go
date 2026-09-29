@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -38,7 +40,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
 	mux.HandleFunc("/api/auth/register-url", s.handleRegisterURL)
 	mux.HandleFunc("/api/auth/open-browser", s.handleOpenBrowser)
-	mux.HandleFunc("/api/auth/browser-session", s.handleBrowserSession)
 	mux.HandleFunc("/auth/callback", s.handleAuthCallbackPage)
 
 	// ── Discord & Quests Endpoints ──
@@ -77,7 +78,39 @@ func (s *Server) Routes() http.Handler {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		localOrigin := fmt.Sprintf("http://127.0.0.1:%d", s.port)
+		if r.Host != fmt.Sprintf("127.0.0.1:%d", s.port) ||
+			(r.Header.Get("Origin") != "" && r.Header.Get("Origin") != localOrigin) ||
+			(r.Header.Get("Sec-Fetch-Site") != "" && r.Header.Get("Sec-Fetch-Site") != "same-origin" && r.Header.Get("Sec-Fetch-Site") != "none") {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) ensureDiscordToken(w http.ResponseWriter) (string, bool) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	token, err := s.authMgr.GetDiscordToken()
+	if err != nil {
+		status := http.StatusServiceUnavailable
+		code := "discord_token_unavailable"
+		switch {
+		case errors.Is(err, auth.ErrNotAuthenticated):
+			status, code = http.StatusUnauthorized, "nixlabs_session_invalid"
+		case errors.Is(err, auth.ErrDiscordTokenMissing):
+			status, code = http.StatusNotFound, "discord_token_missing"
+		case errors.Is(err, auth.ErrDiscordTokenInvalid):
+			status, code = http.StatusUnprocessableEntity, "discord_token_invalid"
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
+		return "", false
+	}
+	s.questEngine.SetToken(token)
+	return token, true
 }
 
 func (s *Server) Start() error {

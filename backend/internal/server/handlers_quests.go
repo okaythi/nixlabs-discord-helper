@@ -8,6 +8,9 @@ import (
 
 func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.ensureDiscordToken(w); !ok {
+		return
+	}
 	forceRefresh := r.URL.Query().Get("refresh") == "true"
 	questsList, err := s.questEngine.GetNormalizedQuests(forceRefresh)
 	if err != nil {
@@ -22,6 +25,9 @@ func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleQuestComplete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.ensureDiscordToken(w); !ok {
+		return
+	}
 	var body struct {
 		QuestID string `json:"quest_id"`
 	}
@@ -42,6 +48,9 @@ func (s *Server) handleQuestComplete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleQuestCompleteAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.ensureDiscordToken(w); !ok {
+		return
+	}
 	if err := s.questEngine.StartAllQuests(); err != nil {
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -52,11 +61,17 @@ func (s *Server) handleQuestCompleteAll(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleQuestCancel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.ensureDiscordToken(w); !ok {
+		return
+	}
 	s.questEngine.CancelRunning()
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
 func (s *Server) handleQuestEvents(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureDiscordToken(w); !ok {
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

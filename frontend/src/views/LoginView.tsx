@@ -157,10 +157,10 @@ export const LoginView: React.FC = () => {
               variant="ghost"
               onClick={() => {
                 setRegistrationUrl(null);
-                setMode('card');
+                setMode('in_app_form');
               }}
             >
-              {t('cancel')}
+              {t('signIn')}
             </Button>
           </div>
         )}
