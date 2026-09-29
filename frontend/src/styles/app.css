@@ -673,3 +673,25 @@
     justify-content: space-between;
   }
 }
+.refresh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-icon.is-spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+.refresh-status {
+  color: var(--text-muted);
+  margin: 0 0 1rem;
+}
+
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-icon.is-spinning { animation: none; }
+}

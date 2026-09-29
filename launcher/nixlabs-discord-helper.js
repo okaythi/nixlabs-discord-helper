@@ -12,7 +12,9 @@ Gdk.set_program_class('Nixlabs DiscordHelper');
 
 Gtk.init(null);
 
-const PORT = 45731;
+// Give each window its own backend. A shared fixed port lets one window shut
+// down another window's server, leaving the UI with "Load failed" requests.
+const PORT = 40000 + Math.floor(Math.random() * 20000);
 const APP_URL = `http://127.0.0.1:${PORT}`;
 
 // Apply dark CSS background to GTK window, container, and viewport to eliminate white flash

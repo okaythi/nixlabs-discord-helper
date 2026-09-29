@@ -222,6 +222,9 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Nixlabs-Client", "discord-helper")
+	req.Header.Set("X-Nixlabs-Client-Version", "1.0.9")
+	req.Header.Set("X-Request-ID", fmt.Sprintf("dh-%d", time.Now().UnixNano()))
 
 	resp, err := m.client.Do(req)
 	if err != nil {
@@ -233,10 +236,14 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	if resp.StatusCode != 200 {
 		var errData map[string]string
 		_ = json.Unmarshal(bodyBytes, &errData)
-		if msg, ok := errData["error"]; ok {
-			return nil, nil, fmt.Errorf("%s", msg)
+		requestID := resp.Header.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = req.Header.Get("X-Request-ID")
 		}
-		return nil, nil, fmt.Errorf("authentication failed (%d)", resp.StatusCode)
+		if msg, ok := errData["error"]; ok {
+			return nil, nil, fmt.Errorf("%s (HTTP %d; request %s)", msg, resp.StatusCode, requestID)
+		}
+		return nil, nil, fmt.Errorf("authentication failed (HTTP %d; request %s)", resp.StatusCode, requestID)
 	}
 
 	// Extract session cookie

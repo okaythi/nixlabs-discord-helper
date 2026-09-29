@@ -35,3 +35,11 @@ export function writeRefreshCache<T>(key: string, cache: RefreshCache<T>): void 
     // The view still works if persistent storage is unavailable.
   }
 }
+
+export function clearRefreshCache(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // An unavailable storage backend should not prevent a live refresh.
+  }
+}

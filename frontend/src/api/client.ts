@@ -4,10 +4,15 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new Error('Could not reach the Discord Helper local service. Close all app windows and reopen it.');
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useI18n } from '../context/I18nContext';
-import { useAuth } from '../context/AuthContext';
-import { cacheKey, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
+import { getDiscordUser } from '../api/discordApi';
+import { cacheKey, clearRefreshCache, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
 import { discordTokenErrorMessage, formatQuestType } from '../i18n';
 import {
   getQuests,
@@ -22,11 +22,12 @@ import {
 
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
-  const { user } = useAuth();
-  const storageKey = user ? cacheKey('quests', user.id || user.handle) : null;
+  const [discordId, setDiscordId] = useState<string | null>(null);
+  const storageKey = discordId ? cacheKey('quests', discordId) : null;
 
   const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [activeProgress, setActiveProgress] = useState<QuestProgressEvent | null>(null);
@@ -36,24 +37,38 @@ export const QuestsView: React.FC = () => {
 
   const [checkedAt, setCheckedAt] = useState(0);
 
+  useEffect(() => {
+    let active = true;
+    getDiscordUser().then((profile) => {
+      if (!profile.id) throw new Error('Discord account identity is unavailable');
+      if (active) setDiscordId(profile.id);
+    }).catch((err) => {
+      if (!active) return;
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to verify Discord account');
+      setIsLoading(false);
+    });
+    return () => { active = false; };
+  }, [t]);
+
   const fetchQuestsList = useCallback(async (explicitRefresh = false) => {
     if (!storageKey) return;
     const cached = readRefreshCache<Quest[]>(storageKey);
     if (!explicitRefresh && Date.now() - cached.checkedAt < REFRESH_INTERVAL_MS) return;
     const now = Date.now();
-    writeRefreshCache(storageKey, { ...cached, checkedAt: now });
-    setCheckedAt(now);
     setIsLoading(cached.value === null);
+    setIsRefreshing(explicitRefresh && cached.value !== null);
     setError(null);
     try {
       const res = await getQuests(true);
       const next = res.quests || [];
       setQuests(next);
       writeRefreshCache(storageKey, { checkedAt: now, value: next });
+      setCheckedAt(now);
     } catch (err: any) {
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to load quests');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [storageKey, t]);
 
@@ -75,6 +90,28 @@ export const QuestsView: React.FC = () => {
     const timer = window.setTimeout(() => void fetchQuestsList(), remaining);
     return () => window.clearTimeout(timer);
   }, [storageKey, checkedAt, activeProgress?.running, fetchQuestsList]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      const profile = await getDiscordUser(true);
+      if (!profile.id) throw new Error('Discord account identity is unavailable');
+      if (profile.id !== discordId) {
+        const nextKey = cacheKey('quests', profile.id);
+        clearRefreshCache(nextKey);
+        setQuests([]);
+        setIsLoading(true);
+        setDiscordId(profile.id);
+      } else {
+        await fetchQuestsList(true);
+      }
+    } catch (err: any) {
+      setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to refresh quests');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeQuestProgress((event) => {
@@ -149,11 +186,13 @@ export const QuestsView: React.FC = () => {
         <div className="view-header-actions">
           <Button
             variant="ghost"
-            onClick={() => fetchQuestsList(true)}
-            disabled={isLoading || isAnyRunning}
+            onClick={handleRefresh}
+            disabled={isLoading || isRefreshing || isAnyRunning}
             title={t('refreshQuests')}
           >
-            <IconRefresh size={16} />
+            <span className={isRefreshing ? 'refresh-icon is-spinning' : 'refresh-icon'}>
+              <IconRefresh size={16} />
+            </span>
             <span>{t('refreshQuests')}</span>
           </Button>
 
@@ -161,7 +200,7 @@ export const QuestsView: React.FC = () => {
             <Button
               variant="primary"
               onClick={handleStartAllQuests}
-              disabled={isAnyRunning || isStartingAll || isLoading}
+              disabled={isAnyRunning || isStartingAll || isLoading || isRefreshing || !!error}
             >
               <IconSparkles size={16} />
               <span>{isStartingAll ? t('running') : t('completeAll')}</span>
@@ -175,6 +214,8 @@ export const QuestsView: React.FC = () => {
           {error}
         </div>
       )}
+
+      {isRefreshing && <p className="refresh-status" role="status">{t('loadingDetails')}</p>}
 
       {/* ── Active Progress Widget ── */}
       {isAnyRunning && activeProgress && (
@@ -204,7 +245,7 @@ export const QuestsView: React.FC = () => {
           </div>
           <h2 className="no-quests-title">{t('noQuestsFound')}</h2>
           <p className="no-quests-desc">{t('noQuestsDescription')}</p>
-          <Button variant="secondary" onClick={() => fetchQuestsList(true)}>
+          <Button variant="secondary" onClick={handleRefresh} disabled={isRefreshing}>
             {t('refreshQuests')}
           </Button>
         </div>
@@ -252,7 +293,7 @@ export const QuestsView: React.FC = () => {
                       <Button
                         variant={canComplete ? 'primary' : 'secondary'}
                         onClick={() => handleStartSingleQuest(quest.id)}
-                        disabled={!canComplete || isAnyRunning || isStartingQuestId === quest.id}
+                        disabled={!canComplete || isAnyRunning || isRefreshing || !!error || isStartingQuestId === quest.id}
                         className="quest-action-btn"
                       >
                         <IconPlay size={14} />

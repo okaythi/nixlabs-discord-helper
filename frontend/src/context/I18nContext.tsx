@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { locales, resolveLocale, formatString, type LocaleKey } from '../i18n';
 import type { Translations } from '../i18n/locales/en-uk';
 
@@ -25,11 +25,11 @@ export function I18nProvider({
     }
   }, [userLanguage]);
 
-  const t = (key: keyof Translations, params?: Record<string, string | number>): string => {
+  const t = useCallback((key: keyof Translations, params?: Record<string, string | number>): string => {
     const dict = locales[locale] || locales['en-uk'];
     const text = dict[key] || locales['en-uk'][key] || String(key);
     return params ? formatString(text, params) : text;
-  };
+  }, [locale]);
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>

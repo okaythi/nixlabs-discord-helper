@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { discordTokenErrorMessage } from '../i18n';
 import { getDiscordUser } from '../api/discordApi';
-import { cacheKey, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
 import type { DiscordUser } from '../types/discord';
 import { Avatar } from '../components/common/Avatar';
 import { Button } from '../components/common/Button';
@@ -13,52 +12,29 @@ import { IconDiscord, IconShield, IconRefresh } from '../components/icons';
 export const AccountView: React.FC = () => {
   const { user, account } = useAuth();
   const { t, locale } = useI18n();
-  const storageKey = user ? cacheKey('discord-profile', user.id || user.handle) : null;
-
   const [discordUser, setDiscordUser] = useState<DiscordUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [checkedAt, setCheckedAt] = useState(0);
-
   const fetchDiscord = useCallback(async (explicitRefresh = false) => {
-    if (!storageKey) return;
-    const cached = readRefreshCache<DiscordUser>(storageKey);
-    if (!explicitRefresh && Date.now() - cached.checkedAt < REFRESH_INTERVAL_MS) return;
-    const now = Date.now();
-    writeRefreshCache(storageKey, { ...cached, checkedAt: now });
-    setCheckedAt(now);
-    setIsLoading(cached.value === null);
+    setIsRefreshing(explicitRefresh);
     setError(null);
     try {
       const data = await getDiscordUser(explicitRefresh);
       setDiscordUser(data);
-      writeRefreshCache(storageKey, { checkedAt: now, value: data });
     } catch (err: any) {
+      setDiscordUser(null);
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to fetch Discord user profile');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [storageKey, t]);
+  }, [t]);
 
   useEffect(() => {
-    if (!storageKey) return;
-    const cached = readRefreshCache<DiscordUser>(storageKey);
-    setDiscordUser(cached.value);
-    setCheckedAt(cached.checkedAt);
-    setIsLoading(cached.value === null && cached.checkedAt === 0);
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (!storageKey) return;
-    const remaining = Math.max(0, readRefreshCache<DiscordUser>(storageKey).checkedAt + REFRESH_INTERVAL_MS - Date.now());
-    if (remaining === 0) {
-      void fetchDiscord();
-      return;
-    }
-    const timer = window.setTimeout(() => void fetchDiscord(), remaining);
-    return () => window.clearTimeout(timer);
-  }, [storageKey, checkedAt, fetchDiscord]);
+    void fetchDiscord();
+  }, [fetchDiscord]);
 
   const standingLabel = account?.banned
     ? t('standingBanned')
@@ -149,11 +125,13 @@ export const AccountView: React.FC = () => {
             <Button
               variant="ghost"
               onClick={() => fetchDiscord(true)}
-              disabled={isLoading}
+              disabled={isLoading || isRefreshing}
               title={t('retry')}
               aria-label={t('retry')}
             >
-              <IconRefresh size={16} />
+              <span className={isRefreshing ? 'refresh-icon is-spinning' : 'refresh-icon'}>
+                <IconRefresh size={16} />
+              </span>
             </Button>
           </div>
 
