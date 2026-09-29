@@ -9,17 +9,20 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"nixlabs-discord-helper/internal/auth"
 	"nixlabs-discord-helper/internal/quests"
 )
 
 type Server struct {
-	port        int
-	authMgr     *auth.Manager
-	questEngine *quests.Engine
-	distFS      fs.FS
-	httpServer  *http.Server
+	port                 int
+	authMgr              *auth.Manager
+	questEngine          *quests.Engine
+	questStartMu         sync.Mutex
+	questStartGeneration uint64
+	distFS               fs.FS
+	httpServer           *http.Server
 }
 
 func NewServer(port int, authMgr *auth.Manager, questEngine *quests.Engine, distFS fs.FS) *Server {

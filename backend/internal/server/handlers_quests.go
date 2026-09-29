@@ -26,6 +26,9 @@ func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleQuestComplete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	s.questStartMu.Lock()
+	generation := s.questStartGeneration
+	s.questStartMu.Unlock()
 	if _, ok := s.ensureDiscordToken(w); !ok {
 		return
 	}
@@ -38,7 +41,16 @@ func (s *Server) handleQuestComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.questEngine.StartQuest(body.QuestID); err != nil {
+	s.questStartMu.Lock()
+	if generation != s.questStartGeneration {
+		s.questStartMu.Unlock()
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "quest_start_cancelled"})
+		return
+	}
+	err := s.questEngine.StartQuest(body.QuestID)
+	s.questStartMu.Unlock()
+	if err != nil {
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -49,10 +61,22 @@ func (s *Server) handleQuestComplete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleQuestCompleteAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	s.questStartMu.Lock()
+	generation := s.questStartGeneration
+	s.questStartMu.Unlock()
 	if _, ok := s.ensureDiscordToken(w); !ok {
 		return
 	}
-	if err := s.questEngine.StartAllQuests(); err != nil {
+	s.questStartMu.Lock()
+	if generation != s.questStartGeneration {
+		s.questStartMu.Unlock()
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "quest_start_cancelled"})
+		return
+	}
+	err := s.questEngine.StartAllQuests()
+	s.questStartMu.Unlock()
+	if err != nil {
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -62,7 +86,10 @@ func (s *Server) handleQuestCompleteAll(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleQuestCancel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	s.questStartMu.Lock()
+	s.questStartGeneration++
 	s.questEngine.CancelRunning()
+	s.questStartMu.Unlock()
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { getDiscordUser } from '../api/discordApi';
 import { cacheKey, clearRefreshCache, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
@@ -38,6 +38,8 @@ export const QuestsView: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
 
   const [checkedAt, setCheckedAt] = useState(0);
+  const startGeneration = useRef(0);
+  const cancellationRequested = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -116,6 +118,7 @@ export const QuestsView: React.FC = () => {
   };
 
   const applyProgressEvent = useCallback((event: QuestProgressEvent) => {
+    if (cancellationRequested.current && event.running) return;
     if (!event.running && !event.status_text && !event.error) return;
     setActiveProgress(event);
     setIsTrackingProgress(event.running);
@@ -169,6 +172,8 @@ export const QuestsView: React.FC = () => {
   }, [isTrackingProgress, applyProgressEvent]);
 
   const handleStartSingleQuest = async (questId: string) => {
+    const generation = ++startGeneration.current;
+    cancellationRequested.current = false;
     const quest = quests.find((item) => item.id === questId);
     setIsStartingQuestId(questId);
     setActiveProgress({
@@ -179,15 +184,21 @@ export const QuestsView: React.FC = () => {
     setError(null);
     try {
       await completeQuest(questId);
+      if (generation !== startGeneration.current) return;
       setIsTrackingProgress(true);
+      getQuestProgress().then(applyProgressEvent).catch(() => {});
     } catch (err: any) {
+      if (generation !== startGeneration.current) return;
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start quest');
+      setIsTrackingProgress(false);
       setIsStartingQuestId(null);
       setActiveProgress(null);
     }
   };
 
   const handleStartAllQuests = async () => {
+    const generation = ++startGeneration.current;
+    cancellationRequested.current = false;
     setIsStartingAll(true);
     setActiveProgress({
       quest_id: '', quest_name: '', task_type: '', seconds_done: 0, seconds_needed: 0,
@@ -196,20 +207,32 @@ export const QuestsView: React.FC = () => {
     setError(null);
     try {
       await completeAllQuests();
+      if (generation !== startGeneration.current) return;
       setIsTrackingProgress(true);
+      getQuestProgress().then(applyProgressEvent).catch(() => {});
     } catch (err: any) {
+      if (generation !== startGeneration.current) return;
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to start all quests');
+      setIsTrackingProgress(false);
       setIsStartingAll(false);
       setActiveProgress(null);
     }
   };
 
   const handleStopQuest = async () => {
+    ++startGeneration.current;
+    cancellationRequested.current = true;
     setIsStopping(true);
+    setIsTrackingProgress(false);
+    setIsStartingQuestId(null);
+    setIsStartingAll(false);
+    setActiveProgress(null);
     try {
       await cancelQuest();
     } catch (err: any) {
-      console.error('Failed to cancel quest:', err);
+      cancellationRequested.current = false;
+      setError(err?.message || 'Failed to stop quest');
+      getQuestProgress().then(applyProgressEvent).catch(() => {});
     } finally {
       setIsStopping(false);
     }
