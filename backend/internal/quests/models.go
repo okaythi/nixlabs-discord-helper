@@ -37,5 +37,6 @@ type ProgressEvent struct {
 	StatusText    string  `json:"status_text"`
 	Running       bool    `json:"running"`
 	Completed     bool    `json:"completed"`
+	Estimated     bool    `json:"estimated,omitempty"`
 	Error         string  `json:"error,omitempty"`
 }

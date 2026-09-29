@@ -35,5 +35,6 @@ export interface QuestProgressEvent {
   status_text: string;
   running: boolean;
   completed: boolean;
+  estimated?: boolean;
   error?: string;
 }

@@ -454,6 +454,16 @@
   transition: width 0.3s ease;
 }
 
+.progress-fill.is-indeterminate {
+  width: 35% !important;
+  animation: quest-progress-loading 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes quest-progress-loading {
+  from { transform: translateX(0); }
+  to { transform: translateX(185%); }
+}
+
 .quest-progress-footer {
   display: flex;
   align-items: center;

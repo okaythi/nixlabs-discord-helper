@@ -103,6 +103,24 @@ func TestServerConfirmedProgress(t *testing.T) {
 	}
 }
 
+func TestEstimatedHeartbeatProgressDoesNotComplete(t *testing.T) {
+	var estimates []ProgressEvent
+	runner := NewTaskRunner(nil, func(event ProgressEvent) { estimates = append(estimates, event) })
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+	if err := runner.showHeartbeatEstimate(ctx, "q", "Quest", "PLAY_ACTIVITY", 5, 0, 20*time.Second); err != context.DeadlineExceeded {
+		t.Fatalf("expected timeout, got %v", err)
+	}
+	if len(estimates) == 0 {
+		t.Fatal("no estimated progress was emitted between heartbeats")
+	}
+	for _, event := range estimates {
+		if !event.Estimated || event.Completed || !event.Running || event.SecondsDone >= float64(event.SecondsNeeded) {
+			t.Fatalf("estimate must remain running and below completion: %+v", event)
+		}
+	}
+}
+
 func TestEnrollmentFailureStopsProgress(t *testing.T) {
 	var paths []string
 	setHandler(t, func(req *http.Request) (*http.Response, error) {

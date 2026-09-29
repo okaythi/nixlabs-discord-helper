@@ -153,6 +153,7 @@ export const QuestsView: React.FC = () => {
           secondsDone={activeProgress.seconds_done}
           secondsNeeded={activeProgress.seconds_needed}
           percent={activeProgress.percent}
+          estimated={activeProgress.estimated}
           subtext={activeProgress.status_text}
           onStop={handleStopQuest}
           isStopping={isStopping}

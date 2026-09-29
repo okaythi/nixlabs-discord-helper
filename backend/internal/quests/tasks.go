@@ -87,12 +87,12 @@ func (tr *TaskRunner) Enroll(ctx context.Context, questID string, trafficRaw, tr
 	return err
 }
 
-func (tr *TaskRunner) progress(qid, name, taskType string, done float64, needed int, status string) {
+func (tr *TaskRunner) progress(qid, name, taskType string, done float64, needed int, status string, estimated bool) {
 	tr.broadcast(ProgressEvent{
 		QuestID: qid, QuestName: name, TaskType: taskType,
 		SecondsDone: done, SecondsNeeded: needed,
 		Percent: minFloat(100, done/float64(needed)*100),
-		Running: true, StatusText: status,
+		Running: true, Estimated: estimated, StatusText: status,
 	})
 }
 
@@ -125,7 +125,7 @@ func (tr *TaskRunner) CompleteVideo(ctx context.Context, qid, name, taskType str
 			return err
 		}
 		secondsDone = timestamp
-		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Watching video: %s (%.0fs / %ds)", name, secondsDone, secondsNeeded))
+		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Watching video: %s (%.0fs / %ds)", name, secondsDone, secondsNeeded), false)
 		if completed(body) {
 			return nil
 		}
@@ -170,7 +170,7 @@ func (tr *TaskRunner) completeHeartbeat(ctx context.Context, qid, name, taskType
 				}
 			}
 		}
-		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Playing %s (%.0fs / %ds)", name, secondsDone, secondsNeeded))
+		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Playing %s (%.0fs / %ds)", name, secondsDone, secondsNeeded), false)
 		if completed(body) || secondsDone >= float64(secondsNeeded) {
 			// The server has confirmed progress. Ending the heartbeat is best effort.
 			_, _ = tr.post(ctx, path, map[string]interface{}{"stream_key": streamKey, "terminal": true})
@@ -184,8 +184,31 @@ func (tr *TaskRunner) completeHeartbeat(ctx context.Context, qid, name, taskType
 		} else {
 			stalled = 0
 		}
-		if err := waitFor(ctx, 20*time.Second); err != nil {
+		if err := tr.showHeartbeatEstimate(ctx, qid, name, taskType, secondsNeeded, secondsDone, 20*time.Second); err != nil {
 			return err
+		}
+	}
+}
+
+// Keep the bar moving between heartbeat responses. These values are display-only:
+// the next request still uses secondsDone from Discord, and this never completes a quest.
+func (tr *TaskRunner) showHeartbeatEstimate(ctx context.Context, qid, name, taskType string, needed int, confirmed float64, interval time.Duration) error {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	started := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		case <-ticker.C:
+			estimate := minFloat(float64(needed)*0.99, confirmed+time.Since(started).Seconds())
+			if estimate > confirmed {
+				tr.progress(qid, name, taskType, estimate, needed, fmt.Sprintf("Playing %s (estimated; waiting for Discord)", name), true)
+			}
 		}
 	}
 }

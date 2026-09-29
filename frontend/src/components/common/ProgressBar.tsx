@@ -10,6 +10,7 @@ interface ProgressBarProps {
   secondsDone: number;
   secondsNeeded: number;
   percent: number;
+  estimated?: boolean;
   subtext: string;
   onStop?: () => void;
   isStopping?: boolean;
@@ -21,19 +22,21 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   secondsDone,
   secondsNeeded,
   percent,
+  estimated = false,
   subtext,
   onStop,
   isStopping = false,
 }) => {
   const { t } = useI18n();
-  const clampedPercent = Math.min(100, Math.max(0, percent));
+  const hasMeasuredProgress = secondsNeeded > 0 && Number.isFinite(percent);
+  const clampedPercent = hasMeasuredProgress ? Math.min(100, Math.max(0, percent)) : 0;
 
   return (
     <div className="quest-progress-card" role="region" aria-label={t('liveProgressTitle')}>
       <div className="quest-progress-header">
         <div className="quest-progress-meta">
-          <span className="quest-progress-badge">{formatQuestType(taskType, t)}</span>
-          <h3 className="quest-progress-title">{questName}</h3>
+          {taskType && <span className="quest-progress-badge">{formatQuestType(taskType, t)}</span>}
+          <h3 className="quest-progress-title">{questName || t('loadingDetails')}</h3>
         </div>
         {onStop && (
           <Button
@@ -48,18 +51,18 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         )}
       </div>
 
-      <div className="progress-track" role="progressbar" aria-valuenow={clampedPercent} aria-valuemin={0} aria-valuemax={100}>
+      <div className="progress-track" role="progressbar" aria-valuenow={hasMeasuredProgress ? clampedPercent : undefined} aria-valuemin={0} aria-valuemax={100} aria-valuetext={hasMeasuredProgress ? undefined : subtext}>
         <div
-          className="progress-fill"
+          className={`progress-fill${hasMeasuredProgress ? '' : ' is-indeterminate'}`}
           style={{ width: `${clampedPercent}%` }}
         />
       </div>
 
       <div className="quest-progress-footer">
         <p className="quest-progress-subtext">{subtext}</p>
-        <span className="quest-progress-counter">
-          {Math.floor(secondsDone)}s / {secondsNeeded}s ({Math.round(clampedPercent)}%)
-        </span>
+        {hasMeasuredProgress && <span className="quest-progress-counter">
+          {estimated ? '~' : ''}{Math.floor(secondsDone)}s / {secondsNeeded}s ({estimated ? '~' : ''}{Math.round(clampedPercent)}%)
+        </span>}
       </div>
     </div>
   );
