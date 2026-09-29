@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+# Kill any running daemon instances before removing
+pkill -f "/usr/lib/nixlabs-discord-helper/nixlabs-discord-helper-bin" || true
+
+exit 0

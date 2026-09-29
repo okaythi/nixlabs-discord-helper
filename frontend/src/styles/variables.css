@@ -1,0 +1,75 @@
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1e1f20;
+  --bg-card: #252628;
+  --bg-subtle: #323436;
+  --bg-hover: #2c2e31;
+  --code-bg: #323436;
+  --text: #e8eaed;
+  --text-muted: #adb2b9;
+  --border: #42454a;
+  --border-focus: #9ccaff;
+  --accent: #a8cdff;
+  --on-accent: #10335e;
+  --active-bg: #193f61;
+  --active-text: #d6eaff;
+  --success: #8cd6a7;
+  --danger: #ffb4ab;
+  --danger-bg: #422f30;
+  --overlay: #00000080;
+  --shadow: #00000040;
+  --pro-cyan: #70b5ff;
+  --pro-sky: #4daaff;
+  --pro-blue: #1a73e8;
+  --pro-indigo: #7c4dff;
+  --pro-pill-bg: #262a31;
+  --pro-pill-text: #f5f7ff;
+  --pro-pill-border: #415c87;
+  --pro-surface: #252c39;
+  --tone-blue: #a8c7fa;
+  --tone-green: #9cd6ae;
+  --tone-sky: #91d4f6;
+  --tone-peach: #f1bf9b;
+  --tone-purple: #cbb7f2;
+  --tone-coral: #f7b4c6;
+  --tone-ink: #243342;
+  --art-blue: #679afa;
+  --art-mint: #7aceac;
+  --art-yellow: #f9cf67;
+  --art-peach: #ffad86;
+  --art-coral: #f28ca5;
+  --sans: 'Ubuntu', sans-serif;
+  --mono: 'Ubuntu Mono', monospace;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafd;
+  --bg-card: #ffffff;
+  --bg-subtle: #e9eef5;
+  --bg-hover: #f0f4f9;
+  --code-bg: #e9eef5;
+  --text: #202124;
+  --text-muted: #5c626b;
+  --border: #dce1e7;
+  --border-focus: #1967d2;
+  --accent: #0b57c3;
+  --on-accent: #ffffff;
+  --active-bg: #d8e7ff;
+  --active-text: #174a8b;
+  --success: #226d42;
+  --danger: #ad292d;
+  --danger-bg: #fcebea;
+  --overlay: #1e293b60;
+  --shadow: #25365320;
+  --pro-pill-bg: #283345;
+  --pro-pill-border: #5076a8;
+  --pro-surface: #f0f5ff;
+  --tone-blue: #c2d8fb;
+  --tone-green: #bce8c9;
+  --tone-sky: #b8e7fb;
+  --tone-peach: #f8d4b9;
+  --tone-purple: #e0d1fa;
+  --tone-coral: #fcd0dc;
+}

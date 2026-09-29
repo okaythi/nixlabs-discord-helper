@@ -1,0 +1,665 @@
+/* ── nixlabs | Discord Helper Specific Styles ────────────────────────────────── */
+
+/* ── Typography & Global Helpers ── */
+.mono-text {
+  font-family: var(--mono);
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+/* ── In-App Login Form & Handoff ── */
+.in-app-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.text-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--sans);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.text-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+.auth-error-banner {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.4;
+  border: 1px solid var(--danger);
+  margin-bottom: 12px;
+}
+
+.awaiting-browser-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.awaiting-browser-box h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.awaiting-browser-box p {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+}
+
+.browser-retry-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.browser-retry-link:hover {
+  opacity: 0.8;
+}
+
+.pulse-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  opacity: 0.8;
+  animation: pulse-ring 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.9;
+  }
+}
+
+/* ── Header User Badge ── */
+.header-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 20px;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+
+.header-username {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.header-logout-btn {
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Account View ── */
+.account-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.profile-hero-card {
+  border-radius: 16px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+}
+
+.discord-banner {
+  height: 160px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 16px;
+}
+
+.discord-badge-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.discord-hero-body {
+  padding: 0 24px 24px;
+  position: relative;
+}
+
+.discord-avatar-container {
+  margin-top: -48px;
+  margin-bottom: 12px;
+  display: inline-block;
+  border-radius: 50%;
+  border: 4px solid var(--bg-card);
+  background-color: var(--bg-card);
+}
+
+.discord-avatar img,
+.discord-avatar .avatar-image {
+  border-radius: 50%;
+}
+
+.discord-info-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.discord-names {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.discord-display-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.discord-username {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.account-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.meta-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ── Nixlabs Profile Card ── */
+.nixlabs-profile-card {
+  border-radius: 16px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 24px;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.card-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.nixlabs-profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.nixlabs-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nixlabs-user-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.nixlabs-user-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.nixlabs-user-handle {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.standing-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.standing-badge--good {
+  background-color: rgba(140, 214, 167, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.standing-badge--limited {
+  background-color: rgba(249, 207, 103, 0.15);
+  color: var(--art-yellow);
+  border: 1px solid var(--art-yellow);
+}
+
+.standing-badge--banned {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.nixlabs-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Quests View ── */
+.quests-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.view-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.view-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.view-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.view-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Quest Progress Card ── */
+.quest-progress-card {
+  border-radius: 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-focus);
+  padding: 20px;
+  box-shadow: 0 4px 16px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quest-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quest-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quest-progress-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: var(--active-bg);
+  color: var(--active-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.quest-progress-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.quest-stop-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--tone-blue), var(--tone-purple));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.quest-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quest-progress-subtext {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  margin: 0;
+}
+
+.quest-progress-counter {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+/* ── Quests Empty State & Grid ── */
+.quests-loading-state,
+.no-quests-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+  border-radius: 16px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  gap: 16px;
+}
+
+.no-quests-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.no-quests-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.no-quests-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  max-width: 440px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.quests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.quest-card {
+  border-radius: 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.quest-card:hover {
+  border-color: var(--border-focus);
+}
+
+.quest-card.is-active {
+  border-color: var(--accent);
+}
+
+.quest-hero-banner {
+  height: 110px;
+  background-size: cover;
+  background-position: center;
+}
+
+.quest-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 8px;
+}
+
+.quest-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quest-task-type {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.quest-reward-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: var(--pro-surface);
+  color: var(--pro-cyan);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.quest-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.quest-game-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  flex: 1;
+}
+
+.quest-card-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.quest-status-completed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quest-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* ── Fluid & Responsive Rules ── */
+@media (max-width: 768px) {
+  .app-body {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px !important;
+  }
+
+  .side-nav {
+    flex-direction: row !important;
+    gap: 8px;
+  }
+
+  .sidebar-footer {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .discord-hero-body {
+    padding: 0 16px 16px;
+  }
+
+  .discord-display-name {
+    font-size: 20px;
+  }
+
+  .view-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .view-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

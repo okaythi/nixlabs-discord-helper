@@ -1,0 +1,9 @@
+node_modules/
+frontend/node_modules
+frontend/dist/
+backend/dist/
+backend/nixlabs-discord-helper-bin
+build/
+*.deb
+*.log
+.DS_Store

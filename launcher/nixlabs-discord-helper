@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+# nixlabs | Discord Helper launch wrapper
+LAUNCHER_JS="/usr/lib/nixlabs-discord-helper/launcher.js"
+
+if [[ ! -f "$LAUNCHER_JS" ]]; then
+    # Development fallback
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    LAUNCHER_JS="${SCRIPT_DIR}/nixlabs-discord-helper.js"
+fi
+
+exec gjs "$LAUNCHER_JS" "$@"

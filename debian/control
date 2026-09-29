@@ -1,0 +1,10 @@
+Package: nixlabs-discord-helper
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: nixlabs <dev@nixlabs.tech>
+Depends: gjs, gir1.2-gtk-3.0, gir1.2-webkit2-4.1
+Description: nixlabs | Discord Helper
+ Native desktop application for Discord quest automation and nixlabs identity integration.
+ Features in-app authentication, Discord user metadata derivation, and quest completion.
