@@ -31,7 +31,7 @@ export const AccountView: React.FC = () => {
     setIsLoading(cached.value === null);
     setError(null);
     try {
-      const data = await getDiscordUser();
+      const data = await getDiscordUser(explicitRefresh);
       setDiscordUser(data);
       writeRefreshCache(storageKey, { checkedAt: now, value: data });
     } catch (err: any) {

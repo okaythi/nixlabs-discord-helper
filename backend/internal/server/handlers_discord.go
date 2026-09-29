@@ -11,7 +11,7 @@ import (
 func (s *Server) handleDiscordUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	profile, err := s.authMgr.GetDiscordBotProfile()
+	profile, err := s.authMgr.GetDiscordBotProfile(r.URL.Query().Get("refresh") == "true")
 	if err != nil {
 		status := http.StatusServiceUnavailable
 		code := "discord_token_unavailable"

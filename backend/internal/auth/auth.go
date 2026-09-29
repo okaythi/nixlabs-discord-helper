@@ -71,13 +71,22 @@ func (m *Manager) Save(a *StoredAuth) {
 	}
 }
 
-func (m *Manager) GetSession() (bool, map[string]interface{}, map[string]interface{}) {
+func (m *Manager) GetSession(forceRefresh ...bool) (bool, map[string]interface{}, map[string]interface{}) {
 	m.mu.RLock()
 	a := m.auth
 	m.mu.RUnlock()
 
 	if a == nil || a.SessionCookie == "" {
 		return false, nil, nil
+	}
+
+	// Reuse the last successful profile for 12 hours, including across app restarts.
+	// Explicit Account refresh bypasses this cache.
+	if len(forceRefresh) == 0 || !forceRefresh[0] {
+		updatedAt, err := time.Parse(time.RFC3339, a.UpdatedAt)
+		if err == nil && a.User != nil && time.Since(updatedAt) >= 0 && time.Since(updatedAt) < 12*time.Hour {
+			return true, a.User, a.Account
+		}
 	}
 
 	// Verify or refresh against accounts.nixlabs.tech if cookie is present
@@ -161,8 +170,8 @@ func (m *Manager) GetDiscordToken() (string, error) {
 
 // GetDiscordBotProfile asks Accounts to perform the global bot-token lookup.
 // The bot secret never leaves Accounts or reaches this desktop process.
-func (m *Manager) GetDiscordBotProfile() ([]byte, error) {
-	if ok, _, _ := m.GetSession(); !ok {
+func (m *Manager) GetDiscordBotProfile(forceProfileRefresh ...bool) ([]byte, error) {
+	if ok, _, _ := m.GetSession(forceProfileRefresh...); !ok {
 		return nil, ErrNotAuthenticated
 	}
 	m.mu.RLock()
