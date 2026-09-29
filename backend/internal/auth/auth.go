@@ -132,6 +132,7 @@ func (m *Manager) GetDiscordToken() (string, error) {
 		return "", ErrDiscordTokenUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Cookie", "_nixlabs_session="+a.SessionCookie)
 	req.Header.Set("Accept", "application/json")
 	resp, err := m.client.Do(req)
 	if err != nil {
@@ -139,6 +140,8 @@ func (m *Manager) GetDiscordToken() (string, error) {
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		return "", ErrNotAuthenticated
 	case http.StatusNotFound:
 		return "", ErrDiscordTokenMissing
 	case http.StatusUnprocessableEntity:
@@ -173,6 +176,7 @@ func (m *Manager) GetDiscordBotProfile() ([]byte, error) {
 		return nil, ErrDiscordTokenUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Cookie", "_nixlabs_session="+a.SessionCookie)
 	req.Header.Set("Accept", "application/json")
 	resp, err := m.client.Do(req)
 	if err != nil {
@@ -180,6 +184,8 @@ func (m *Manager) GetDiscordBotProfile() ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		return nil, ErrNotAuthenticated
 	case http.StatusNotFound:
 		return nil, ErrDiscordTokenMissing
 	case http.StatusUnprocessableEntity:
