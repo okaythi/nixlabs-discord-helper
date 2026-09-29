@@ -156,6 +156,45 @@ func (m *Manager) GetDiscordToken() (string, error) {
 	}
 }
 
+// GetDiscordBotProfile asks Accounts to perform the global bot-token lookup.
+// The bot secret never leaves Accounts or reaches this desktop process.
+func (m *Manager) GetDiscordBotProfile() ([]byte, error) {
+	if ok, _, _ := m.GetSession(); !ok {
+		return nil, ErrNotAuthenticated
+	}
+	m.mu.RLock()
+	a := m.auth
+	m.mu.RUnlock()
+	if a == nil || a.SessionCookie == "" {
+		return nil, ErrNotAuthenticated
+	}
+	req, err := http.NewRequest(http.MethodGet, config.AccountsAPIBase+"/api/third-party-auth/discord-helper/bot-profile", nil)
+	if err != nil {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Accept", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, ErrDiscordTokenMissing
+	case http.StatusUnprocessableEntity:
+		return nil, ErrDiscordTokenInvalid
+	case http.StatusOK:
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		if err != nil || !json.Valid(body) {
+			return nil, ErrDiscordTokenUnavailable
+		}
+		return body, nil
+	default:
+		return nil, ErrDiscordTokenUnavailable
+	}
+}
+
 func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{}, map[string]interface{}, error) {
 	payload, _ := json.Marshal(map[string]string{
 		"identifier": identifier,

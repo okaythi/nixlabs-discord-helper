@@ -33,7 +33,7 @@ export const ja: Translations = {
   loginFailed: "認証に失敗しました。",
 
   discordAccountTitle: "Discordアカウント",
-  discordAccountSubtitle: '保存された Discord アカウントのトークンから取得',
+  discordAccountSubtitle: '連携したアカウントの情報を Nixlabs Discord ボットで取得',
   usernameLabel: "ユーザー名",
   displayNameLabel: "表示名",
   userIdLabel: "ユーザーID",

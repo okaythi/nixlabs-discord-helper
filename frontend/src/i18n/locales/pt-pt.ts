@@ -33,7 +33,7 @@ export const ptPT: Translations = {
   loginFailed: "Falha na autenticação.",
 
   discordAccountTitle: "Conta do Discord",
-  discordAccountSubtitle: 'Obtido com o token guardado da sua conta Discord',
+  discordAccountSubtitle: 'Obtido pelo bot Discord da Nixlabs para a sua conta associada',
   usernameLabel: "Utilizador",
   displayNameLabel: "Nome de apresentação",
   userIdLabel: "ID do utilizador",

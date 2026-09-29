@@ -1,5 +1,5 @@
 APP_NAME := nixlabs-discord-helper
-VERSION := 1.0.1
+VERSION := 1.0.2
 ARCH := amd64
 DEB_NAME := $(APP_NAME)_$(VERSION)_$(ARCH).deb
 

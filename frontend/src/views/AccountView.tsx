@@ -90,7 +90,7 @@ export const AccountView: React.FC = () => {
         <div
           className="discord-banner"
           style={{
-            backgroundColor: discordUser?.banner_color || '#97e4e0',
+            backgroundColor: discordUser?.banner_color || 'var(--bg-subtle)',
             backgroundImage: discordUser?.banner_url ? `url(${discordUser.banner_url})` : undefined,
           }}
         >

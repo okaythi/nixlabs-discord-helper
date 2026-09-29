@@ -36,7 +36,7 @@ export const frBE: Translations = {
 
   // Account View
   discordAccountTitle: "Compte Discord",
-  discordAccountSubtitle: 'Récupéré grâce au jeton enregistré de votre compte Discord',
+  discordAccountSubtitle: 'Récupéré par le bot Discord de Nixlabs pour votre compte lié',
   usernameLabel: "Nom d’utilisateur",
   displayNameLabel: "Nom d’affichage",
   userIdLabel: "Identifiant utilisateur",
