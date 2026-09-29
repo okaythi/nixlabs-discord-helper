@@ -1,8 +1,8 @@
 import React from 'react';
-import { IconUser, IconSparkles } from '../icons';
+import { IconUser, IconSparkles, IconSnowflake } from '../icons';
 import { useI18n } from '../../context/I18nContext';
 
-export type NavTab = 'account' | 'quests';
+export type NavTab = 'account' | 'quests' | 'snowflakes';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
   const navItems = [
     { id: 'account' as NavTab, label: t('tabAccount'), icon: IconUser, tone: 'tone-blue' },
     { id: 'quests' as NavTab, label: t('tabQuests'), icon: IconSparkles, tone: 'tone-purple' },
+    { id: 'snowflakes' as NavTab, label: t('tabSnowflakes'), icon: IconSnowflake, tone: 'tone-sky' },
   ];
 
   return (

@@ -6,6 +6,7 @@ import type { NavTab } from './components/layout/Sidebar';
 import { LoginView } from './views/LoginView';
 import { AccountView } from './views/AccountView';
 import { QuestsView } from './views/QuestsView';
+import { SnowflakesView } from './views/SnowflakesView';
 
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -31,6 +32,7 @@ function AppContent() {
     <Shell activeTab={activeTab} onNavigate={setActiveTab}>
       {activeTab === 'account' && <AccountView />}
       {activeTab === 'quests' && <QuestsView />}
+      {activeTab === 'snowflakes' && <SnowflakesView />}
     </Shell>
   );
 }

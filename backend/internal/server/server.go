@@ -44,6 +44,7 @@ func (s *Server) Routes() http.Handler {
 
 	// ── Discord & Quests Endpoints ──
 	mux.HandleFunc("/api/discord/user", s.handleDiscordUser)
+	mux.HandleFunc("/api/discord/snowflake/", s.handleDiscordSnowflake)
 	mux.HandleFunc("/api/quests", s.handleQuests)
 	mux.HandleFunc("/api/quests/complete", s.handleQuestComplete)
 	mux.HandleFunc("/api/quests/complete-all", s.handleQuestCompleteAll)

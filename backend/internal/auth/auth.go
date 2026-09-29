@@ -210,6 +210,40 @@ func (m *Manager) GetDiscordBotProfile(forceProfileRefresh ...bool) ([]byte, err
 	}
 }
 
+// GetDiscordSnowflake asks Accounts to look up a snowflake with its global bot.
+// The bot secret stays on Accounts; only selected public object fields are returned.
+func (m *Manager) GetDiscordSnowflake(id string) ([]byte, error) {
+	if ok, _, _ := m.GetSession(); !ok {
+		return nil, ErrNotAuthenticated
+	}
+	m.mu.RLock()
+	a := m.auth
+	m.mu.RUnlock()
+	if a == nil || a.SessionCookie == "" {
+		return nil, ErrNotAuthenticated
+	}
+	req, err := http.NewRequest(http.MethodGet, config.AccountsAPIBase+"/api/third-party-auth/discord-helper/snowflakes/"+id, nil)
+	if err != nil {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Cookie", "_nixlabs_session="+a.SessionCookie)
+	req.Header.Set("Accept", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	if err != nil || !json.Valid(body) {
+		return nil, ErrDiscordTokenUnavailable
+	}
+	return body, nil
+}
+
 func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{}, map[string]interface{}, error) {
 	payload, _ := json.Marshal(map[string]string{
 		"identifier": identifier,
@@ -223,7 +257,7 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Nixlabs-Client", "discord-helper")
-	req.Header.Set("X-Nixlabs-Client-Version", "1.0.10")
+	req.Header.Set("X-Nixlabs-Client-Version", "1.0.11")
 	req.Header.Set("X-Request-ID", fmt.Sprintf("dh-%d", time.Now().UnixNano()))
 
 	resp, err := m.client.Do(req)
