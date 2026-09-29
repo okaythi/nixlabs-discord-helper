@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=nixlabs | Discord Helper
+Name=Discord Helper
 Comment=Discord Quest Automator and Profile Companion
 Exec=/usr/bin/nixlabs-discord-helper
 Icon=nixlabs-discord-helper
 Terminal=false
 Type=Application
 Categories=Utility;Network;Game;
-StartupWMClass=nixlabs-discord-helper
+StartupWMClass=Nixlabs DiscordHelper
 Keywords=discord;quests;orbs;nixlabs;

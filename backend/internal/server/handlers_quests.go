@@ -61,15 +61,13 @@ func (s *Server) handleQuestCompleteAll(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleQuestCancel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if _, ok := s.ensureDiscordToken(w); !ok {
-		return
-	}
 	s.questEngine.CancelRunning()
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
 func (s *Server) handleQuestEvents(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.ensureDiscordToken(w); !ok {
+	if !s.questEngine.HasToken() {
+		http.Error(w, `{"error":"discord_token_unavailable"}`, http.StatusUnauthorized)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")

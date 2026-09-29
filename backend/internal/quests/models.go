@@ -1,11 +1,11 @@
 package quests
 
-var SupportedTasks = map[string]bool{
-	"WATCH_VIDEO":           true,
-	"PLAY_ON_DESKTOP":       true,
-	"STREAM_ON_DESKTOP":     true,
-	"PLAY_ACTIVITY":         true,
-	"WATCH_VIDEO_ON_MOBILE": true,
+var SupportedTasks = []string{
+	"WATCH_VIDEO",
+	"PLAY_ON_DESKTOP",
+	"STREAM_ON_DESKTOP",
+	"PLAY_ACTIVITY",
+	"WATCH_VIDEO_ON_MOBILE",
 }
 
 // QuestNormalized represents a sanitized model returned to the frontend.

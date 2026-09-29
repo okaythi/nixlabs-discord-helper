@@ -18,16 +18,12 @@ import {
   IconCheckCircle,
 } from '../components/icons';
 
-const QUESTS_LAST_REFRESH_KEY = 'nixlabs_discord_quests_last_refresh';
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
 
   const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasQuestAccess, setHasQuestAccess] = useState(false);
 
   const [activeProgress, setActiveProgress] = useState<QuestProgressEvent | null>(null);
   const [isStartingQuestId, setIsStartingQuestId] = useState<string | null>(null);
@@ -38,27 +34,9 @@ export const QuestsView: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      let shouldForceRefresh = explicitRefresh;
-      if (!shouldForceRefresh) {
-        const lastRefreshStr = localStorage.getItem(QUESTS_LAST_REFRESH_KEY);
-        if (!lastRefreshStr) {
-          shouldForceRefresh = true;
-        } else {
-          const lastRefreshTime = parseInt(lastRefreshStr, 10);
-          if (isNaN(lastRefreshTime) || (Date.now() - lastRefreshTime > TWELVE_HOURS_MS)) {
-            shouldForceRefresh = true;
-          }
-        }
-      }
-
-      const res = await getQuests(shouldForceRefresh);
-      setHasQuestAccess(true);
+      const res = await getQuests(explicitRefresh);
       setQuests(res.quests || []);
-      if (shouldForceRefresh) {
-        localStorage.setItem(QUESTS_LAST_REFRESH_KEY, String(Date.now()));
-      }
     } catch (err: any) {
-      setHasQuestAccess(false);
       setError(discordTokenErrorMessage(err, t) || err?.message || 'Failed to load quests');
     } finally {
       setIsLoading(false);
@@ -66,28 +44,32 @@ export const QuestsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchQuestsList(false);
+    fetchQuestsList(true);
+    const timer = window.setInterval(() => fetchQuestsList(true), 60_000);
+    return () => window.clearInterval(timer);
   }, [fetchQuestsList]);
 
   // Subscribe to real-time progress events from the Go quest engine
   useEffect(() => {
-    if (!hasQuestAccess) return;
     const unsubscribe = subscribeQuestProgress((event) => {
       setActiveProgress(event);
+      if (event.error) setError(event.error);
 
-      // If quest just completed or stopped, refresh the quests list without forcing
+      // Refresh server status after completion or cancellation.
       if (!event.running) {
         setIsStartingQuestId(null);
         setIsStartingAll(false);
         setIsStopping(false);
-        fetchQuestsList(false);
+        fetchQuestsList(true).then(() => {
+          if (event.error) setError(event.error);
+        });
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [fetchQuestsList, hasQuestAccess]);
+  }, [fetchQuestsList]);
 
   const handleStartSingleQuest = async (questId: string) => {
     setIsStartingQuestId(questId);

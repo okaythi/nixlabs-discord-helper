@@ -4,6 +4,12 @@ imports.gi.versions.WebKit2 = '4.1';
 
 const { Gtk, Gdk, GdkPixbuf, WebKit2, GLib, Gio } = imports.gi;
 
+// Give the GJS-hosted app its own identity. Desktop shells otherwise attribute
+// an unresponsive window to the generic "gjs" runtime.
+GLib.set_prgname('nixlabs-discord-helper');
+GLib.set_application_name('Nixlabs DiscordHelper');
+Gdk.set_program_class('Nixlabs DiscordHelper');
+
 Gtk.init(null);
 
 const PORT = 45731;
@@ -53,11 +59,15 @@ try {
 Gtk.Window.set_default_icon_name('nixlabs-discord-helper');
 
 const win = new Gtk.Window({
-    title: 'nixlabs | Discord Helper',
+    title: 'Discord Helper',
     window_position: Gtk.WindowPosition.CENTER,
     default_width: 1024,
     default_height: 720
 });
+
+// Keep the window associated with the desktop entry in docks, app switchers,
+// and compositor "not responding" dialogs.
+win.set_wmclass('nixlabs-discord-helper', 'Nixlabs DiscordHelper');
 
 // Set multi-resolution icon list for pristine quality across taskbar, tray, alt-tab, and dock
 const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512];

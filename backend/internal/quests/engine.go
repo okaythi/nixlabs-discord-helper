@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -83,6 +82,12 @@ func (e *Engine) ClearToken() {
 	e.cacheMu.Unlock()
 }
 
+func (e *Engine) HasToken() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.tokenDigest != [32]byte{}
+}
+
 func (e *Engine) loadCacheFromDisk() {
 	cachePath := filepath.Join(config.GetConfigDir(), "quests_cache.json")
 	dataBytes, err := os.ReadFile(cachePath)
@@ -138,12 +143,33 @@ func (e *Engine) MarkQuestCompleted(questID string) {
 	}
 	for i := range e.cachedRaw {
 		if qID, _ := e.cachedRaw[i]["id"].(string); qID == questID {
-			us, _ := e.cachedRaw[i]["user_status"].(map[string]interface{})
+			us := getMap(e.cachedRaw[i], "user_status", "userStatus")
 			if us == nil {
 				us = make(map[string]interface{})
 				e.cachedRaw[i]["user_status"] = us
 			}
 			us["completed_at"] = time.Now().UTC().Format(time.RFC3339)
+		}
+	}
+	e.cacheMu.Unlock()
+	e.persistCacheToDisk()
+}
+
+func (e *Engine) markQuestEnrolled(questID, enrolledAt string) {
+	e.cacheMu.Lock()
+	for i := range e.cachedQuests {
+		if e.cachedQuests[i].ID == questID {
+			e.cachedQuests[i].Enrolled = true
+		}
+	}
+	for _, quest := range e.cachedRaw {
+		if id, _ := quest["id"].(string); id == questID {
+			status := getMap(quest, "user_status", "userStatus")
+			if status == nil {
+				status = make(map[string]interface{})
+				quest["user_status"] = status
+			}
+			status["enrolled_at"] = enrolledAt
 		}
 	}
 	e.cacheMu.Unlock()
@@ -174,6 +200,10 @@ func parseRetryAfter(resp *http.Response) time.Duration {
 }
 
 func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
+	return e.fetchRawQuests(context.Background(), force)
+}
+
+func (e *Engine) fetchRawQuests(ctx context.Context, force bool) ([]map[string]interface{}, error) {
 	if !force {
 		e.cacheMu.RLock()
 		if e.cachedRaw != nil && time.Now().Before(e.cacheExpiry) {
@@ -190,32 +220,46 @@ func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
 	var list []map[string]interface{}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		req, err := e.client.NewUserRequest("GET", "/quests/@me", nil)
 		if err != nil {
 			return nil, err
 		}
 
-		resp, err := e.client.Do(req)
+		resp, err := e.client.Do(req.WithContext(ctx))
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * time.Second)
+			if err := waitFor(ctx, time.Duration(attempt+1)*time.Second); err != nil {
+				return nil, err
+			}
 			continue
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			var result map[string]interface{}
+			var result interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 				resp.Body.Close()
 				return nil, err
 			}
 			resp.Body.Close()
 
-			questsRaw, ok := result["quests"].([]interface{})
-			if ok {
-				for _, item := range questsRaw {
-					if m, ok := item.(map[string]interface{}); ok {
-						list = append(list, m)
-					}
+			var questsRaw []interface{}
+			switch data := result.(type) {
+			case map[string]interface{}:
+				questsRaw, _ = data["quests"].([]interface{})
+			case []interface{}:
+				questsRaw = data
+			default:
+				return nil, fmt.Errorf("unexpected Discord quest response")
+			}
+			for _, item := range questsRaw {
+				if m, ok := item.(map[string]interface{}); ok {
+					list = append(list, m)
 				}
 			}
 			lastErr = nil
@@ -247,7 +291,9 @@ func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
 			}
 
 			sleepDur := time.Duration(retrySec*float64(time.Second)) + 500*time.Millisecond
-			time.Sleep(sleepDur)
+			if err := waitFor(ctx, sleepDur); err != nil {
+				return nil, err
+			}
 			lastErr = fmt.Errorf("discord API error 429: %s", string(bodyBytes))
 			continue
 		}
@@ -256,7 +302,7 @@ func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
 		break
 	}
 
-	if lastErr != nil {
+	if lastErr != nil && !force {
 		e.cacheMu.RLock()
 		if e.cachedRaw != nil && len(e.cachedRaw) > 0 {
 			raw := make([]map[string]interface{}, len(e.cachedRaw))
@@ -265,6 +311,9 @@ func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
 			return raw, nil
 		}
 		e.cacheMu.RUnlock()
+		return nil, lastErr
+	}
+	if lastErr != nil {
 		return nil, lastErr
 	}
 
@@ -284,7 +333,7 @@ func (e *Engine) GetNormalizedQuests(force bool) ([]QuestNormalized, error) {
 	}
 
 	rawList, err := e.FetchRawQuests(force)
-	if err != nil {
+	if err != nil && !force {
 		e.cacheMu.RLock()
 		if e.cachedQuests != nil && len(e.cachedQuests) > 0 {
 			result := make([]QuestNormalized, len(e.cachedQuests))
@@ -295,9 +344,12 @@ func (e *Engine) GetNormalizedQuests(force bool) ([]QuestNormalized, error) {
 		e.cacheMu.RUnlock()
 		return nil, err
 	}
+	if err != nil {
+		return nil, err
+	}
 
 	normalized := e.normalizeRawQuests(rawList)
-	e.saveCache(rawList, normalized, 12*time.Hour)
+	e.saveCache(rawList, normalized, time.Minute)
 	return normalized, nil
 }
 
@@ -324,22 +376,12 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 
 		publisher := getString(msgs, "game_publisher", "gamePublisher")
 
-		tc := getMap(cfg, "task_config_v2", "taskConfigV2", "task_config", "taskConfig")
+		tc := getMap(cfg, "taskConfig", "task_config", "taskConfigV2", "task_config_v2")
 		tasks := getMap(tc, "tasks")
 
-		var taskType string
-		var targetSeconds int
-		for tName := range SupportedTasks {
-			if taskObj, exists := tasks[tName].(map[string]interface{}); exists {
-				taskType = tName
-				if tgt, ok := taskObj["target"].(float64); ok {
-					targetSeconds = int(tgt)
-				}
-				break
-			}
-		}
+		taskType, targetSeconds := selectedTask(tasks)
 
-		us, _ := q["user_status"].(map[string]interface{})
+		us := getMap(q, "user_status", "userStatus")
 		enrolledAt := getString(us, "enrolled_at", "enrolledAt")
 		completedAt := getString(us, "completed_at", "completedAt")
 
@@ -353,14 +395,7 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 		}
 
 		expiresAt := getString(cfg, "expires_at", "expiresAt")
-		completable := taskType != ""
-		if expiresAt != "" {
-			if parsedExp, pErr := time.Parse(time.RFC3339, strings.ReplaceAll(expiresAt, "Z", "+00:00")); pErr == nil {
-				if parsedExp.Before(now) {
-					completable = false
-				}
-			}
-		}
+		completable := isCompletable(q, now)
 
 		var orbQuantity int
 		if rewards, ok := rewardsCfg["rewards"].([]interface{}); ok && len(rewards) > 0 {
@@ -446,18 +481,20 @@ func (e *Engine) broadcast(ev ProgressEvent) {
 
 func (e *Engine) CancelRunning() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.activeCancel != nil {
-		e.activeCancel()
-		e.activeCancel = nil
+	if !e.isRunning || e.activeCancel == nil {
+		e.mu.Unlock()
+		return
 	}
-	e.isRunning = false
+	e.activeCancel()
+	ev := ProgressEvent{Running: false, StatusText: "Cancelled"}
 	if e.currentEvent != nil {
-		ev := *e.currentEvent
+		ev = *e.currentEvent
 		ev.Running = false
+		ev.Completed = false
 		ev.StatusText = "Cancelled"
-		e.broadcast(ev)
 	}
+	e.mu.Unlock()
+	e.broadcast(ev)
 }
 
 func (e *Engine) StartQuest(questID string) error {
@@ -469,7 +506,9 @@ func (e *Engine) StartQuest(questID string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.activeCancel = cancel
 	e.isRunning = true
+	e.currentEvent = nil
 	e.mu.Unlock()
+	e.broadcast(ProgressEvent{QuestID: questID, Running: true, StatusText: "Loading quest"})
 
 	go func() {
 		defer func() {
@@ -477,11 +516,16 @@ func (e *Engine) StartQuest(questID string) error {
 			e.isRunning = false
 			e.activeCancel = nil
 			e.mu.Unlock()
+			if ctx.Err() != nil {
+				e.broadcast(ProgressEvent{QuestID: questID, Running: false, StatusText: "Cancelled"})
+			}
 		}()
 
-		rawList, err := e.FetchRawQuests(false)
+		rawList, err := e.fetchRawQuests(ctx, true)
 		if err != nil {
-			e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+			if ctx.Err() == nil {
+				e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+			}
 			return
 		}
 
@@ -498,7 +542,10 @@ func (e *Engine) StartQuest(questID string) error {
 			return
 		}
 
-		e.runSingleQuest(ctx, targetQuest)
+		e.saveCache(rawList, e.normalizeRawQuests(rawList), time.Minute)
+		if err := e.runSingleQuest(ctx, targetQuest, false); err != nil && ctx.Err() == nil {
+			e.broadcast(ProgressEvent{QuestID: questID, Running: false, Error: err.Error()})
+		}
 	}()
 
 	return nil
@@ -513,7 +560,9 @@ func (e *Engine) StartAllQuests() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.activeCancel = cancel
 	e.isRunning = true
+	e.currentEvent = nil
 	e.mu.Unlock()
+	e.broadcast(ProgressEvent{Running: true, StatusText: "Loading quests"})
 
 	go func() {
 		defer func() {
@@ -521,39 +570,67 @@ func (e *Engine) StartAllQuests() error {
 			e.isRunning = false
 			e.activeCancel = nil
 			e.mu.Unlock()
+			if ctx.Err() != nil {
+				e.broadcast(ProgressEvent{Running: false, StatusText: "Cancelled"})
+			}
 		}()
 
-		rawList, err := e.FetchRawQuests(false)
+		rawList, err := e.fetchRawQuests(ctx, true)
 		if err != nil {
-			e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+			if ctx.Err() == nil {
+				e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+			}
 			return
 		}
+		e.saveCache(rawList, e.normalizeRawQuests(rawList), time.Minute)
 
+		failures := 0
+		processed := 0
 		for _, q := range rawList {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				us, _ := q["user_status"].(map[string]interface{})
+				us := getMap(q, "user_status", "userStatus")
 				if getString(us, "completed_at", "completedAt") != "" {
 					continue
 				}
-				e.runSingleQuest(ctx, q)
-				time.Sleep(3 * time.Second)
+				if !isCompletable(q, time.Now()) {
+					continue
+				}
+				processed++
+				if err := e.runSingleQuest(ctx, q, true); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					failures++
+					failed := e.normalizeRawQuests([]map[string]interface{}{q})[0]
+					e.broadcast(ProgressEvent{
+						QuestID: failed.ID, QuestName: failed.Name, TaskType: failed.TaskType,
+						SecondsDone: failed.SecondsDone, SecondsNeeded: failed.SecondsNeeded,
+						Running: true, Error: err.Error(), StatusText: "Quest failed; continuing",
+					})
+				}
+				if err := waitFor(ctx, 3*time.Second); err != nil {
+					return
+				}
 			}
 		}
 
-		e.broadcast(ProgressEvent{
-			Running:    false,
-			Completed:  true,
-			StatusText: "All eligible quests completed!",
-		})
+		ev := ProgressEvent{Running: false, Completed: failures == 0 && processed > 0, StatusText: "All eligible quests completed!"}
+		if failures > 0 {
+			ev.Error = fmt.Sprintf("%d of %d quests failed", failures, processed)
+			ev.StatusText = ev.Error
+		} else if processed == 0 {
+			ev.StatusText = "No eligible quests found"
+		}
+		e.broadcast(ev)
 	}()
 
 	return nil
 }
 
-func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{}) {
+func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{}, batch bool) error {
 	qid, _ := quest["id"].(string)
 	cfg, _ := quest["config"].(map[string]interface{})
 	msgs, _ := cfg["messages"].(map[string]interface{})
@@ -562,26 +639,19 @@ func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{
 		name = getString(msgs, "game_title", "gameTitle")
 	}
 
-	tc := getMap(cfg, "task_config_v2", "taskConfigV2", "task_config", "taskConfig")
+	tc := getMap(cfg, "taskConfig", "task_config", "taskConfigV2", "task_config_v2")
 	tasks := getMap(tc, "tasks")
 
-	var taskType string
-	var secondsNeeded int
-	for tName := range SupportedTasks {
-		if taskObj, exists := tasks[tName].(map[string]interface{}); exists {
-			taskType = tName
-			if tgt, ok := taskObj["target"].(float64); ok {
-				secondsNeeded = int(tgt)
-			}
-			break
-		}
+	taskType, secondsNeeded := selectedTask(tasks)
+
+	if taskType == "" || secondsNeeded <= 0 || !isCompletable(quest, time.Now()) {
+		return fmt.Errorf("quest %s is not eligible for completion", qid)
 	}
 
-	if taskType == "" || secondsNeeded == 0 {
-		return
+	us := getMap(quest, "user_status", "userStatus")
+	if getString(us, "completed_at", "completedAt") != "" {
+		return fmt.Errorf("quest %s is already completed", qid)
 	}
-
-	us, _ := quest["user_status"].(map[string]interface{})
 	enrolledAt := getString(us, "enrolled_at", "enrolledAt")
 	if enrolledAt == "" {
 		e.broadcast(ProgressEvent{
@@ -592,8 +662,14 @@ func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{
 			Running:       true,
 			StatusText:    fmt.Sprintf("Enrolling in quest: %s...", name),
 		})
-		e.runner.Enroll(ctx, qid, quest["traffic_metadata_raw"], quest["traffic_metadata_sealed"])
-		time.Sleep(2 * time.Second)
+		if err := e.runner.Enroll(ctx, qid, quest["traffic_metadata_raw"], quest["traffic_metadata_sealed"]); err != nil {
+			return fmt.Errorf("enrolling %s: %w", name, err)
+		}
+		enrolledAt = time.Now().UTC().Format(time.RFC3339Nano)
+		e.markQuestEnrolled(qid, enrolledAt)
+		if err := waitFor(ctx, 2*time.Second); err != nil {
+			return err
+		}
 	}
 
 	var secondsDone float64
@@ -605,16 +681,50 @@ func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{
 		}
 	}
 
+	var err error
 	switch taskType {
 	case "WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE":
-		e.runner.CompleteVideo(ctx, qid, name, taskType, secondsNeeded, secondsDone, enrolledAt)
+		err = e.runner.CompleteVideo(ctx, qid, name, taskType, secondsNeeded, secondsDone, enrolledAt)
 	case "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP":
-		e.runner.CompleteHeartbeat(ctx, qid, name, taskType, secondsNeeded, secondsDone)
+		err = e.runner.CompleteHeartbeat(ctx, qid, name, taskType, secondsNeeded, secondsDone)
 	case "PLAY_ACTIVITY":
-		e.runner.CompleteActivity(ctx, qid, name, taskType, secondsNeeded, secondsDone)
+		err = e.runner.CompleteActivity(ctx, qid, name, taskType, secondsNeeded, secondsDone)
 	}
-
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	e.MarkQuestCompleted(qid)
+	e.broadcast(ProgressEvent{QuestID: qid, QuestName: name, TaskType: taskType, SecondsDone: float64(secondsNeeded), SecondsNeeded: secondsNeeded, Percent: 100, Running: batch, Completed: true, StatusText: fmt.Sprintf("Completed quest: %s!", name)})
+	return nil
+}
+
+func selectedTask(tasks map[string]interface{}) (string, int) {
+	for _, name := range SupportedTasks {
+		if task, ok := tasks[name].(map[string]interface{}); ok {
+			if target, ok := task["target"].(float64); ok && target > 0 {
+				return name, int(target)
+			}
+		}
+	}
+	return "", 0
+}
+
+func isCompletable(quest map[string]interface{}, now time.Time) bool {
+	cfg := getMap(quest, "config")
+	tc := getMap(cfg, "taskConfig", "task_config", "taskConfigV2", "task_config_v2")
+	name, target := selectedTask(getMap(tc, "tasks"))
+	if name == "" || target <= 0 {
+		return false
+	}
+	if expires := getString(cfg, "expiresAt", "expires_at"); expires != "" {
+		if when, err := time.Parse(time.RFC3339Nano, expires); err == nil && !when.After(now) {
+			return false
+		}
+	}
+	return true
 }
 
 func getString(m map[string]interface{}, keys ...string) string {

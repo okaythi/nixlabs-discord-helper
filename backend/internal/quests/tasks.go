@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -19,333 +20,174 @@ type TaskRunner struct {
 }
 
 func NewTaskRunner(client *discord.Client, broadcast func(ProgressEvent)) *TaskRunner {
-	return &TaskRunner{
-		client:    client,
-		broadcast: broadcast,
+	return &TaskRunner{client: client, broadcast: broadcast}
+}
+
+func waitFor(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
-func (tr *TaskRunner) Enroll(ctx context.Context, questID string, trafficRaw, trafficSealed interface{}) {
-	payload := map[string]interface{}{
-		"location":                11,
-		"is_targeted":             false,
-		"metadata_raw":            nil,
-		"metadata_sealed":         nil,
-		"traffic_metadata_raw":    trafficRaw,
-		"traffic_metadata_sealed": trafficSealed,
+// post sends one quest update. A rate limit is retried with Discord's cooldown;
+// other failures are returned so they cannot be mistaken for progress.
+func (tr *TaskRunner) post(ctx context.Context, path string, payload interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
 	}
-	body, _ := json.Marshal(payload)
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := tr.client.NewUserRequest(http.MethodPost, path, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		resp, err := tr.client.Do(req.WithContext(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			pause := parseRetryAfter(resp)
+			resp.Body.Close()
+			if err := waitFor(ctx, pause); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("Discord returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		}
+		if len(responseBody) == 0 {
+			return nil, nil
+		}
+		var result map[string]interface{}
+		if err := json.Unmarshal(responseBody, &result); err != nil {
+			return nil, fmt.Errorf("invalid Discord response: %w", err)
+		}
+		return result, nil
+	}
+	return nil, fmt.Errorf("Discord rate limit persisted after three attempts")
+}
 
-	req, err := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/enroll", questID), bytes.NewReader(body))
-	if err == nil {
-		resp, rErr := tr.client.Do(req.WithContext(ctx))
-		if rErr == nil {
-			_ = resp.Body.Close()
+func (tr *TaskRunner) Enroll(ctx context.Context, questID string, trafficRaw, trafficSealed interface{}) error {
+	_, err := tr.post(ctx, fmt.Sprintf("/quests/%s/enroll", questID), map[string]interface{}{
+		"location": 11, "is_targeted": false,
+		"metadata_raw": nil, "metadata_sealed": nil,
+		"traffic_metadata_raw": trafficRaw, "traffic_metadata_sealed": trafficSealed,
+	})
+	return err
+}
+
+func (tr *TaskRunner) progress(qid, name, taskType string, done float64, needed int, status string) {
+	tr.broadcast(ProgressEvent{
+		QuestID: qid, QuestName: name, TaskType: taskType,
+		SecondsDone: done, SecondsNeeded: needed,
+		Percent: minFloat(100, done/float64(needed)*100),
+		Running: true, StatusText: status,
+	})
+}
+
+func completed(body map[string]interface{}) bool {
+	return getString(body, "completed_at", "completedAt") != ""
+}
+
+func (tr *TaskRunner) CompleteVideo(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64, enrolledAtStr string) error {
+	enrolled := time.Now()
+	if parsed, err := time.Parse(time.RFC3339Nano, enrolledAtStr); err == nil {
+		enrolled = parsed
+	}
+	finalAttempts := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		maxAllowed := time.Since(enrolled).Seconds() + 10
+		timestamp := minFloat(float64(secondsNeeded), minFloat(secondsDone+7, maxAllowed))
+		if timestamp <= secondsDone {
+			if err := waitFor(ctx, time.Second); err != nil {
+				return err
+			}
+			continue
+		}
+		body, err := tr.post(ctx, fmt.Sprintf("/quests/%s/video-progress", qid), map[string]interface{}{
+			"timestamp": minFloat(float64(secondsNeeded), timestamp+rand.Float64()),
+		})
+		if err != nil {
+			return err
+		}
+		secondsDone = timestamp
+		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Watching video: %s (%.0fs / %ds)", name, secondsDone, secondsNeeded))
+		if completed(body) {
+			return nil
+		}
+		if secondsDone >= float64(secondsNeeded) {
+			finalAttempts++
+			if finalAttempts >= 3 {
+				return fmt.Errorf("Discord did not confirm video completion")
+			}
+			secondsDone = float64(secondsNeeded) - 0.001 // Retry the final timestamp.
+		}
+		if err := waitFor(ctx, time.Second); err != nil {
+			return err
 		}
 	}
 }
 
-func (tr *TaskRunner) CompleteVideo(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64, enrolledAtStr string) {
-	var enrolledTs float64
-	if enrolledAtStr != "" {
-		if t, err := time.Parse(time.RFC3339, strings.ReplaceAll(enrolledAtStr, "Z", "+00:00")); err == nil {
-			enrolledTs = float64(t.Unix())
+func (tr *TaskRunner) CompleteHeartbeat(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64) error {
+	streamKey := fmt.Sprintf("call:0:%d", rand.Intn(29000)+1000)
+	return tr.completeHeartbeat(ctx, qid, name, taskType, secondsNeeded, secondsDone, streamKey)
+}
+
+func (tr *TaskRunner) CompleteActivity(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64) error {
+	return tr.completeHeartbeat(ctx, qid, name, taskType, secondsNeeded, secondsDone, "call:0:1")
+}
+
+func (tr *TaskRunner) completeHeartbeat(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64, streamKey string) error {
+	path := fmt.Sprintf("/quests/%s/heartbeat", qid)
+	stalled := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-	}
-	if enrolledTs == 0 {
-		enrolledTs = float64(time.Now().Unix())
-	}
-
-	speed := 7.0
-	interval := 1 * time.Second
-
-	for secondsDone < float64(secondsNeeded) {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+		body, err := tr.post(ctx, path, map[string]interface{}{"stream_key": streamKey, "terminal": false})
+		if err != nil {
+			return err
 		}
-
-		maxAllowed := (float64(time.Now().Unix()) - enrolledTs) + 10.0
-		diff := maxAllowed - secondsDone
-		timestamp := secondsDone + speed
-
-		if diff >= speed {
-			body, _ := json.Marshal(map[string]interface{}{
-				"timestamp": minFloat(float64(secondsNeeded), timestamp+rand.Float64()),
-			})
-			req, err := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/video-progress", qid), bytes.NewReader(body))
-			if err == nil {
-				resp, rErr := tr.client.Do(req.WithContext(ctx))
-				if rErr == nil {
-					if resp.StatusCode == http.StatusOK {
-						var resBody map[string]interface{}
-						_ = json.NewDecoder(resp.Body).Decode(&resBody)
-						_ = resp.Body.Close()
-
-						secondsDone = minFloat(float64(secondsNeeded), timestamp)
-						pct := (secondsDone / float64(secondsNeeded)) * 100
-
-						tr.broadcast(ProgressEvent{
-							QuestID:       qid,
-							QuestName:     name,
-							TaskType:      taskType,
-							SecondsDone:   secondsDone,
-							SecondsNeeded: secondsNeeded,
-							Percent:       pct,
-							Running:       true,
-							StatusText:    fmt.Sprintf("Watching video: %s (%.0fs / %ds - %.0f%%)", name, secondsDone, secondsNeeded, pct),
-						})
-
-						if resBody["completed_at"] != nil {
-							break
-						}
-					} else if resp.StatusCode == http.StatusTooManyRequests {
-						retryDur := parseRetryAfter(resp)
-						_ = resp.Body.Close()
-						time.Sleep(retryDur)
-						continue
-					} else {
-						_ = resp.Body.Close()
-					}
+		previous := secondsDone
+		if progress := getMap(body, "progress"); progress != nil {
+			if taskProgress := getMap(progress, taskType); taskProgress != nil {
+				if value, ok := taskProgress["value"].(float64); ok {
+					secondsDone = value
 				}
 			}
 		}
-
-		if timestamp >= float64(secondsNeeded) {
-			break
+		tr.progress(qid, name, taskType, secondsDone, secondsNeeded, fmt.Sprintf("Playing %s (%.0fs / %ds)", name, secondsDone, secondsNeeded))
+		if completed(body) || secondsDone >= float64(secondsNeeded) {
+			// The server has confirmed progress. Ending the heartbeat is best effort.
+			_, _ = tr.post(ctx, path, map[string]interface{}{"stream_key": streamKey, "terminal": true})
+			return ctx.Err()
 		}
-		time.Sleep(interval)
-	}
-
-	// Final progress update
-	body, _ := json.Marshal(map[string]interface{}{"timestamp": secondsNeeded})
-	req, _ := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/video-progress", qid), bytes.NewReader(body))
-	if req != nil {
-		if resp, err := tr.client.Do(req.WithContext(ctx)); err == nil {
-			_ = resp.Body.Close()
-		}
-	}
-
-	tr.broadcast(ProgressEvent{
-		QuestID:       qid,
-		QuestName:     name,
-		TaskType:      taskType,
-		SecondsDone:   float64(secondsNeeded),
-		SecondsNeeded: secondsNeeded,
-		Percent:       100,
-		Running:       false,
-		Completed:     true,
-		StatusText:    fmt.Sprintf("Completed quest: %s!", name),
-	})
-}
-
-func (tr *TaskRunner) CompleteHeartbeat(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64) {
-	pid := rand.Intn(29000) + 1000
-	streamKey := fmt.Sprintf("call:0:%d", pid)
-
-	for secondsDone < float64(secondsNeeded) {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		pct := (secondsDone / float64(secondsNeeded)) * 100
-		tr.broadcast(ProgressEvent{
-			QuestID:       qid,
-			QuestName:     name,
-			TaskType:      taskType,
-			SecondsDone:   secondsDone,
-			SecondsNeeded: secondsNeeded,
-			Percent:       pct,
-			Running:       true,
-			StatusText:    fmt.Sprintf("Playing %s (%.0fs / %ds - %.0f%%)", name, secondsDone, secondsNeeded, pct),
-		})
-
-		body, _ := json.Marshal(map[string]interface{}{
-			"stream_key": streamKey,
-			"terminal":   false,
-		})
-		req, err := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/heartbeat", qid), bytes.NewReader(body))
-		if err == nil {
-			resp, rErr := tr.client.Do(req.WithContext(ctx))
-			if rErr == nil {
-				if resp.StatusCode == http.StatusOK {
-					var resBody map[string]interface{}
-					_ = json.NewDecoder(resp.Body).Decode(&resBody)
-					_ = resp.Body.Close()
-
-					if prog, ok := resBody["progress"].(map[string]interface{}); ok {
-						if tProg, ok := prog[taskType].(map[string]interface{}); ok {
-							if val, ok := tProg["value"].(float64); ok {
-								secondsDone = val
-							}
-						}
-					}
-
-					if resBody["completed_at"] != nil || secondsDone >= float64(secondsNeeded) {
-						break
-					}
-				} else if resp.StatusCode == http.StatusTooManyRequests {
-					retryDur := parseRetryAfter(resp)
-					_ = resp.Body.Close()
-					time.Sleep(retryDur)
-					continue
-				} else {
-					_ = resp.Body.Close()
-				}
+		if secondsDone <= previous {
+			stalled++
+			if stalled >= 6 {
+				return fmt.Errorf("Discord heartbeat progress did not advance")
 			}
+		} else {
+			stalled = 0
 		}
-
-		for i := 0; i < 20 && secondsDone < float64(secondsNeeded); i++ {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				time.Sleep(1 * time.Second)
-				secondsDone++
-				pct = minFloat(100, (secondsDone/float64(secondsNeeded))*100)
-				tr.broadcast(ProgressEvent{
-					QuestID:       qid,
-					QuestName:     name,
-					TaskType:      taskType,
-					SecondsDone:   secondsDone,
-					SecondsNeeded: secondsNeeded,
-					Percent:       pct,
-					Running:       true,
-					StatusText:    fmt.Sprintf("Playing %s (%.0fs / %ds - %.0f%%)", name, secondsDone, secondsNeeded, pct),
-				})
-			}
+		if err := waitFor(ctx, 20*time.Second); err != nil {
+			return err
 		}
 	}
-
-	// Terminal beat
-	body, _ := json.Marshal(map[string]interface{}{
-		"stream_key": streamKey,
-		"terminal":   true,
-	})
-	req, _ := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/heartbeat", qid), bytes.NewReader(body))
-	if req != nil {
-		if resp, err := tr.client.Do(req.WithContext(ctx)); err == nil {
-			_ = resp.Body.Close()
-		}
-	}
-
-	tr.broadcast(ProgressEvent{
-		QuestID:       qid,
-		QuestName:     name,
-		TaskType:      taskType,
-		SecondsDone:   float64(secondsNeeded),
-		SecondsNeeded: secondsNeeded,
-		Percent:       100,
-		Running:       false,
-		Completed:     true,
-		StatusText:    fmt.Sprintf("Completed quest: %s!", name),
-	})
-}
-
-func (tr *TaskRunner) CompleteActivity(ctx context.Context, qid, name, taskType string, secondsNeeded int, secondsDone float64) {
-	streamKey := "call:0:1"
-
-	for secondsDone < float64(secondsNeeded) {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		pct := (secondsDone / float64(secondsNeeded)) * 100
-		tr.broadcast(ProgressEvent{
-			QuestID:       qid,
-			QuestName:     name,
-			TaskType:      taskType,
-			SecondsDone:   secondsDone,
-			SecondsNeeded: secondsNeeded,
-			Percent:       pct,
-			Running:       true,
-			StatusText:    fmt.Sprintf("Playing %s (%.0fs / %ds - %.0f%%)", name, secondsDone, secondsNeeded, pct),
-		})
-
-		body, _ := json.Marshal(map[string]interface{}{
-			"stream_key": streamKey,
-			"terminal":   false,
-		})
-		req, err := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/heartbeat", qid), bytes.NewReader(body))
-		if err == nil {
-			resp, rErr := tr.client.Do(req.WithContext(ctx))
-			if rErr == nil {
-				if resp.StatusCode == http.StatusOK {
-					var resBody map[string]interface{}
-					_ = json.NewDecoder(resp.Body).Decode(&resBody)
-					_ = resp.Body.Close()
-
-					if prog, ok := resBody["progress"].(map[string]interface{}); ok {
-						if tProg, ok := prog["PLAY_ACTIVITY"].(map[string]interface{}); ok {
-							if val, ok := tProg["value"].(float64); ok {
-								secondsDone = val
-							}
-						}
-					}
-
-					if resBody["completed_at"] != nil || secondsDone >= float64(secondsNeeded) {
-						break
-					}
-				} else if resp.StatusCode == http.StatusTooManyRequests {
-					retryDur := parseRetryAfter(resp)
-					_ = resp.Body.Close()
-					time.Sleep(retryDur)
-					continue
-				} else {
-					_ = resp.Body.Close()
-				}
-			}
-		}
-
-		for i := 0; i < 20 && secondsDone < float64(secondsNeeded); i++ {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				time.Sleep(1 * time.Second)
-				secondsDone++
-				pct = minFloat(100, (secondsDone/float64(secondsNeeded))*100)
-				tr.broadcast(ProgressEvent{
-					QuestID:       qid,
-					QuestName:     name,
-					TaskType:      taskType,
-					SecondsDone:   secondsDone,
-					SecondsNeeded: secondsNeeded,
-					Percent:       pct,
-					Running:       true,
-					StatusText:    fmt.Sprintf("Playing %s (%.0fs / %ds - %.0f%%)", name, secondsDone, secondsNeeded, pct),
-				})
-			}
-		}
-	}
-
-	body, _ := json.Marshal(map[string]interface{}{
-		"stream_key": streamKey,
-		"terminal":   true,
-	})
-	req, _ := tr.client.NewUserRequest("POST", fmt.Sprintf("/quests/%s/heartbeat", qid), bytes.NewReader(body))
-	if req != nil {
-		if resp, err := tr.client.Do(req.WithContext(ctx)); err == nil {
-			_ = resp.Body.Close()
-		}
-	}
-
-	tr.broadcast(ProgressEvent{
-		QuestID:       qid,
-		QuestName:     name,
-		TaskType:      taskType,
-		SecondsDone:   float64(secondsNeeded),
-		SecondsNeeded: secondsNeeded,
-		Percent:       100,
-		Running:       false,
-		Completed:     true,
-		StatusText:    fmt.Sprintf("Completed quest: %s!", name),
-	})
 }
 
 func minFloat(a, b float64) float64 {
