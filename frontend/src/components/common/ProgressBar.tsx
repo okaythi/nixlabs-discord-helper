@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from './Button';
 import { IconSquare } from '../icons';
 import { useI18n } from '../../context/I18nContext';
+import { formatQuestType } from '../../i18n';
 
 interface ProgressBarProps {
   questName: string;
@@ -31,7 +32,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     <div className="quest-progress-card" role="region" aria-label={t('liveProgressTitle')}>
       <div className="quest-progress-header">
         <div className="quest-progress-meta">
-          <span className="quest-progress-badge">{taskType}</span>
+          <span className="quest-progress-badge">{formatQuestType(taskType, t)}</span>
           <h3 className="quest-progress-title">{questName}</h3>
         </div>
         {onStop && (

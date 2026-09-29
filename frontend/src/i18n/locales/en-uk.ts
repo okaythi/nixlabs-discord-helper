@@ -38,14 +38,14 @@ export const enUK = {
   userIdLabel: "User ID",
   creationDateLabel: "Account created",
   nixlabsProfileTitle: "Nixlabs Profile",
-  nixlabsProfileSubtitle: "Ecosystem identity & standing",
   handleLabel: "Nixlabs handle",
   emailLabel: "Email address",
   standingGood: "Good standing",
   standingLimited: "Limited standing",
   standingBanned: "Suspended / Banned",
   languageLabel: "Language",
-  roleLabel: "Role",
+  roleLabel: "Tier",
+  tierLabel: "Tier",
 
   // Quests View
   questsTitle: "Discord Quests",
@@ -58,6 +58,7 @@ export const enUK = {
   questCompleted: "Completed",
   questEnrolled: "In progress",
   questAvailable: "Available",
+  running: "Running…",
   liveProgressTitle: "Current Task",
   stopQuest: "Stop",
   subtextPlaying: "Playing {game} ({done}s / {total}s - {percent}%)",
@@ -69,6 +70,13 @@ export const enUK = {
   rewardBadge: "+{count} Orbs",
   expiresAt: "Expires {date}",
   rateLimited: "Discord rate limit encountered. Pausing briefly…",
+
+  // Quest Types
+  questTypeWatchVideo: "Watch video",
+  questTypeWatchVideoOnMobile: "Watch video on mobile",
+  questTypePlayOnDesktop: "Play on desktop",
+  questTypeStreamOnDesktop: "Stream on desktop",
+  questTypePlayActivity: "Play activity",
 };
 
 export type Translations = typeof enUK;

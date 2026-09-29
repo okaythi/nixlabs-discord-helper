@@ -100,6 +100,11 @@ func (tr *TaskRunner) CompleteVideo(ctx context.Context, qid, name, taskType str
 						if resBody["completed_at"] != nil {
 							break
 						}
+					} else if resp.StatusCode == http.StatusTooManyRequests {
+						retryDur := parseRetryAfter(resp)
+						_ = resp.Body.Close()
+						time.Sleep(retryDur)
+						continue
 					} else {
 						_ = resp.Body.Close()
 					}
@@ -183,8 +188,9 @@ func (tr *TaskRunner) CompleteHeartbeat(ctx context.Context, qid, name, taskType
 						break
 					}
 				} else if resp.StatusCode == http.StatusTooManyRequests {
+					retryDur := parseRetryAfter(resp)
 					_ = resp.Body.Close()
-					time.Sleep(10 * time.Second)
+					time.Sleep(retryDur)
 					continue
 				} else {
 					_ = resp.Body.Close()
@@ -285,6 +291,11 @@ func (tr *TaskRunner) CompleteActivity(ctx context.Context, qid, name, taskType 
 					if resBody["completed_at"] != nil || secondsDone >= float64(secondsNeeded) {
 						break
 					}
+				} else if resp.StatusCode == http.StatusTooManyRequests {
+					retryDur := parseRetryAfter(resp)
+					_ = resp.Body.Close()
+					time.Sleep(retryDur)
+					continue
 				} else {
 					_ = resp.Body.Close()
 				}

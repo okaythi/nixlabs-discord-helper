@@ -6,12 +6,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"nixlabs-discord-helper/internal/config"
 	"nixlabs-discord-helper/internal/discord"
 )
+
+type QuestsCacheData struct {
+	CachedAt   time.Time                `json:"cached_at"`
+	ExpiresAt  time.Time                `json:"expires_at"`
+	RawQuests  []map[string]interface{} `json:"raw_quests"`
+	Normalized []QuestNormalized        `json:"normalized"`
+}
 
 type Engine struct {
 	mu           sync.Mutex
@@ -20,6 +31,11 @@ type Engine struct {
 	activeCancel context.CancelFunc
 	isRunning    bool
 	currentEvent *ProgressEvent
+
+	cacheMu      sync.RWMutex
+	cachedQuests []QuestNormalized
+	cachedRaw    []map[string]interface{}
+	cacheExpiry  time.Time
 
 	subMu       sync.Mutex
 	subscribers map[chan ProgressEvent]bool
@@ -31,51 +47,229 @@ func NewEngine(client *discord.Client) *Engine {
 		subscribers: make(map[chan ProgressEvent]bool),
 	}
 	e.runner = NewTaskRunner(client, e.broadcast)
+	e.loadCacheFromDisk()
 	return e
 }
 
-func (e *Engine) FetchRawQuests() ([]map[string]interface{}, error) {
-	req, err := e.client.NewUserRequest("GET", "/quests/@me", nil)
+func (e *Engine) loadCacheFromDisk() {
+	cachePath := filepath.Join(config.GetConfigDir(), "quests_cache.json")
+	dataBytes, err := os.ReadFile(cachePath)
 	if err != nil {
-		return nil, err
+		return
 	}
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, err
+	var cacheData QuestsCacheData
+	if err := json.Unmarshal(dataBytes, &cacheData); err != nil {
+		return
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("discord API error %d: %s", resp.StatusCode, string(b))
+	if time.Now().Before(cacheData.ExpiresAt) && len(cacheData.Normalized) > 0 {
+		e.cacheMu.Lock()
+		e.cachedQuests = cacheData.Normalized
+		e.cachedRaw = cacheData.RawQuests
+		e.cacheExpiry = cacheData.ExpiresAt
+		e.cacheMu.Unlock()
 	}
+}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+func (e *Engine) saveCache(raw []map[string]interface{}, normalized []QuestNormalized, ttl time.Duration) {
+	e.cacheMu.Lock()
+	e.cachedRaw = raw
+	e.cachedQuests = normalized
+	e.cacheExpiry = time.Now().Add(ttl)
+	e.cacheMu.Unlock()
+
+	e.persistCacheToDisk()
+}
+
+func (e *Engine) persistCacheToDisk() {
+	cachePath := filepath.Join(config.GetConfigDir(), "quests_cache.json")
+	e.cacheMu.RLock()
+	cacheData := QuestsCacheData{
+		CachedAt:   time.Now(),
+		ExpiresAt:  e.cacheExpiry,
+		RawQuests:  e.cachedRaw,
+		Normalized: e.cachedQuests,
 	}
+	e.cacheMu.RUnlock()
 
-	questsRaw, ok := result["quests"].([]interface{})
-	if !ok {
-		return nil, nil
+	if b, err := json.MarshalIndent(cacheData, "", "  "); err == nil {
+		_ = os.WriteFile(cachePath, b, 0600)
 	}
+}
 
-	var list []map[string]interface{}
-	for _, item := range questsRaw {
-		if m, ok := item.(map[string]interface{}); ok {
-			list = append(list, m)
+func (e *Engine) MarkQuestCompleted(questID string) {
+	e.cacheMu.Lock()
+	for i := range e.cachedQuests {
+		if e.cachedQuests[i].ID == questID {
+			e.cachedQuests[i].Completed = true
+			e.cachedQuests[i].SecondsDone = float64(e.cachedQuests[i].SecondsNeeded)
 		}
 	}
+	for i := range e.cachedRaw {
+		if qID, _ := e.cachedRaw[i]["id"].(string); qID == questID {
+			us, _ := e.cachedRaw[i]["user_status"].(map[string]interface{})
+			if us == nil {
+				us = make(map[string]interface{})
+				e.cachedRaw[i]["user_status"] = us
+			}
+			us["completed_at"] = time.Now().UTC().Format(time.RFC3339)
+		}
+	}
+	e.cacheMu.Unlock()
+	e.persistCacheToDisk()
+}
+
+func parseRetryAfter(resp *http.Response) time.Duration {
+	if resp == nil {
+		return 3 * time.Second
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var rl struct {
+		RetryAfter float64 `json:"retry_after"`
+	}
+	_ = json.Unmarshal(bodyBytes, &rl)
+	sec := rl.RetryAfter
+	if sec <= 0 {
+		if hVal := resp.Header.Get("Retry-After"); hVal != "" {
+			if parsed, pErr := strconv.ParseFloat(hVal, 64); pErr == nil && parsed > 0 {
+				sec = parsed
+			}
+		}
+	}
+	if sec <= 0 {
+		sec = 3.0
+	}
+	return time.Duration(sec*float64(time.Second)) + 500*time.Millisecond
+}
+
+func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
+	if !force {
+		e.cacheMu.RLock()
+		if e.cachedRaw != nil && time.Now().Before(e.cacheExpiry) {
+			raw := make([]map[string]interface{}, len(e.cachedRaw))
+			copy(raw, e.cachedRaw)
+			e.cacheMu.RUnlock()
+			return raw, nil
+		}
+		e.cacheMu.RUnlock()
+	}
+
+	const maxRetries = 3
+	var lastErr error
+	var list []map[string]interface{}
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := e.client.NewUserRequest("GET", "/quests/@me", nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := e.client.Do(req)
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			var result map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				resp.Body.Close()
+				return nil, err
+			}
+			resp.Body.Close()
+
+			questsRaw, ok := result["quests"].([]interface{})
+			if ok {
+				for _, item := range questsRaw {
+					if m, ok := item.(map[string]interface{}); ok {
+						list = append(list, m)
+					}
+				}
+			}
+			lastErr = nil
+			break
+		}
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusTooManyRequests {
+			var rl struct {
+				Message    string  `json:"message"`
+				RetryAfter float64 `json:"retry_after"`
+				Global     bool    `json:"global"`
+				Code       int     `json:"code"`
+			}
+			_ = json.Unmarshal(bodyBytes, &rl)
+
+			retrySec := rl.RetryAfter
+			if retrySec <= 0 {
+				if hVal := resp.Header.Get("Retry-After"); hVal != "" {
+					if parsed, pErr := strconv.ParseFloat(hVal, 64); pErr == nil && parsed > 0 {
+						retrySec = parsed
+					}
+				}
+			}
+			if retrySec <= 0 {
+				retrySec = float64(attempt+1) * 3.0
+			}
+
+			sleepDur := time.Duration(retrySec*float64(time.Second)) + 500*time.Millisecond
+			time.Sleep(sleepDur)
+			lastErr = fmt.Errorf("discord API error 429: %s", string(bodyBytes))
+			continue
+		}
+
+		lastErr = fmt.Errorf("discord API error %d: %s", resp.StatusCode, string(bodyBytes))
+		break
+	}
+
+	if lastErr != nil {
+		e.cacheMu.RLock()
+		if e.cachedRaw != nil && len(e.cachedRaw) > 0 {
+			raw := make([]map[string]interface{}, len(e.cachedRaw))
+			copy(raw, e.cachedRaw)
+			e.cacheMu.RUnlock()
+			return raw, nil
+		}
+		e.cacheMu.RUnlock()
+		return nil, lastErr
+	}
+
 	return list, nil
 }
 
-func (e *Engine) GetNormalizedQuests() ([]QuestNormalized, error) {
-	rawList, err := e.FetchRawQuests()
+func (e *Engine) GetNormalizedQuests(force bool) ([]QuestNormalized, error) {
+	if !force {
+		e.cacheMu.RLock()
+		if e.cachedQuests != nil && time.Now().Before(e.cacheExpiry) {
+			result := make([]QuestNormalized, len(e.cachedQuests))
+			copy(result, e.cachedQuests)
+			e.cacheMu.RUnlock()
+			return result, nil
+		}
+		e.cacheMu.RUnlock()
+	}
+
+	rawList, err := e.FetchRawQuests(force)
 	if err != nil {
+		e.cacheMu.RLock()
+		if e.cachedQuests != nil && len(e.cachedQuests) > 0 {
+			result := make([]QuestNormalized, len(e.cachedQuests))
+			copy(result, e.cachedQuests)
+			e.cacheMu.RUnlock()
+			return result, nil
+		}
+		e.cacheMu.RUnlock()
 		return nil, err
 	}
 
+	normalized := e.normalizeRawQuests(rawList)
+	e.saveCache(rawList, normalized, 12*time.Hour)
+	return normalized, nil
+}
+
+func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNormalized {
 	var normalized []QuestNormalized
 	now := time.Now().UTC()
 
@@ -178,7 +372,7 @@ func (e *Engine) GetNormalizedQuests() ([]QuestNormalized, error) {
 		})
 	}
 
-	return normalized, nil
+	return normalized
 }
 
 func (e *Engine) Subscribe() chan ProgressEvent {
@@ -253,7 +447,7 @@ func (e *Engine) StartQuest(questID string) error {
 			e.mu.Unlock()
 		}()
 
-		rawList, err := e.FetchRawQuests()
+		rawList, err := e.FetchRawQuests(false)
 		if err != nil {
 			e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
 			return
@@ -297,7 +491,7 @@ func (e *Engine) StartAllQuests() error {
 			e.mu.Unlock()
 		}()
 
-		rawList, err := e.FetchRawQuests()
+		rawList, err := e.FetchRawQuests(false)
 		if err != nil {
 			e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
 			return
@@ -387,6 +581,8 @@ func (e *Engine) runSingleQuest(ctx context.Context, quest map[string]interface{
 	case "PLAY_ACTIVITY":
 		e.runner.CompleteActivity(ctx, qid, name, taskType, secondsNeeded, secondsDone)
 	}
+
+	e.MarkQuestCompleted(qid)
 }
 
 func getString(m map[string]interface{}, keys ...string) string {

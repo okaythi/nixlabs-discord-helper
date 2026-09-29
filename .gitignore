@@ -6,4 +6,5 @@ backend/nixlabs-discord-helper-bin
 build/
 *.deb
 *.log
+*.tsbuildinfo
 .DS_Store

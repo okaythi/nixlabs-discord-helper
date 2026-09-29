@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ISO6391 from 'iso-639-1';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { getDiscordUser } from '../api/discordApi';
@@ -48,17 +49,37 @@ export const AccountView: React.FC = () => {
     try {
       const d = new Date(isoStr);
       return new Intl.DateTimeFormat(locale, {
-        year: 'numeric',
-        month: 'long',
         day: 'numeric',
+        month: 'numeric',
+        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
-        timeZoneName: 'short',
       }).format(d);
     } catch {
       return isoStr;
     }
+  };
+
+  const formatLanguageName = (raw?: string | null): string => {
+    if (!raw) return 'English';
+    const clean = raw.trim().replace('_', '-');
+    const [langCode, regionCode] = clean.split('-');
+    const primary = (langCode || '').toLowerCase();
+
+    if (ISO6391.validate(primary)) {
+      const name = ISO6391.getName(primary);
+      if (regionCode) {
+        return `${name} (${regionCode.toUpperCase()})`;
+      }
+      return name;
+    }
+
+    try {
+      const displayName = new Intl.DisplayNames(['en'], { type: 'language' }).of(clean);
+      if (displayName) return displayName;
+    } catch {}
+
+    return clean;
   };
 
   return (
@@ -142,7 +163,6 @@ export const AccountView: React.FC = () => {
             </div>
             <div>
               <h2 className="card-title">{t('nixlabsProfileTitle')}</h2>
-              <p className="card-subtitle">{t('nixlabsProfileSubtitle')}</p>
             </div>
           </div>
 
@@ -171,7 +191,7 @@ export const AccountView: React.FC = () => {
               </div>
               <div className="meta-item">
                 <span className="meta-label">{t('languageLabel')}</span>
-                <span className="meta-value uppercase">{user.language || 'en-uk'}</span>
+                <span className="meta-value">{formatLanguageName(user.language)}</span>
               </div>
             </div>
           </div>

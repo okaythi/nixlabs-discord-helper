@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useI18n } from '../context/I18nContext';
+import { formatQuestType } from '../i18n';
 import {
   getQuests,
   completeQuest,
@@ -17,6 +18,9 @@ import {
   IconCheckCircle,
 } from '../components/icons';
 
+const QUESTS_LAST_REFRESH_KEY = 'nixlabs_discord_quests_last_refresh';
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
 
@@ -29,12 +33,28 @@ export const QuestsView: React.FC = () => {
   const [isStartingAll, setIsStartingAll] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
-  const fetchQuestsList = useCallback(async () => {
+  const fetchQuestsList = useCallback(async (explicitRefresh = false) => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await getQuests();
+      let shouldForceRefresh = explicitRefresh;
+      if (!shouldForceRefresh) {
+        const lastRefreshStr = localStorage.getItem(QUESTS_LAST_REFRESH_KEY);
+        if (!lastRefreshStr) {
+          shouldForceRefresh = true;
+        } else {
+          const lastRefreshTime = parseInt(lastRefreshStr, 10);
+          if (isNaN(lastRefreshTime) || (Date.now() - lastRefreshTime > TWELVE_HOURS_MS)) {
+            shouldForceRefresh = true;
+          }
+        }
+      }
+
+      const res = await getQuests(shouldForceRefresh);
       setQuests(res.quests || []);
+      if (shouldForceRefresh) {
+        localStorage.setItem(QUESTS_LAST_REFRESH_KEY, String(Date.now()));
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to load quests');
     } finally {
@@ -43,7 +63,7 @@ export const QuestsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchQuestsList();
+    fetchQuestsList(false);
   }, [fetchQuestsList]);
 
   // Subscribe to real-time progress events from the Go quest engine
@@ -51,12 +71,12 @@ export const QuestsView: React.FC = () => {
     const unsubscribe = subscribeQuestProgress((event) => {
       setActiveProgress(event);
 
-      // If quest just completed or stopped, refresh the quests list
+      // If quest just completed or stopped, refresh the quests list without forcing
       if (!event.running) {
         setIsStartingQuestId(null);
         setIsStartingAll(false);
         setIsStopping(false);
-        fetchQuestsList();
+        fetchQuestsList(false);
       }
     });
 
@@ -112,7 +132,7 @@ export const QuestsView: React.FC = () => {
         <div className="view-header-actions">
           <Button
             variant="ghost"
-            onClick={fetchQuestsList}
+            onClick={() => fetchQuestsList(true)}
             disabled={isLoading || isAnyRunning}
             title={t('refreshQuests')}
           >
@@ -166,7 +186,7 @@ export const QuestsView: React.FC = () => {
           </div>
           <h2 className="no-quests-title">{t('noQuestsFound')}</h2>
           <p className="no-quests-desc">{t('noQuestsDescription')}</p>
-          <Button variant="secondary" onClick={fetchQuestsList}>
+          <Button variant="secondary" onClick={() => fetchQuestsList(true)}>
             {t('refreshQuests')}
           </Button>
         </div>
@@ -193,7 +213,7 @@ export const QuestsView: React.FC = () => {
 
                 <div className="quest-card-body">
                   <div className="quest-card-top">
-                    <span className="quest-task-type">{quest.task_type}</span>
+                    <span className="quest-task-type">{formatQuestType(quest.task_type, t)}</span>
                     {quest.orb_quantity && (
                       <span className="quest-reward-pill">
                         {t('rewardBadge', { count: quest.orb_quantity })}

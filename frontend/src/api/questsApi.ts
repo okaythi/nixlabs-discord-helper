@@ -1,8 +1,9 @@
 import { apiRequest } from './client';
 import type { Quest, QuestProgressEvent } from '../types/quests';
 
-export async function getQuests(): Promise<{ quests: Quest[] }> {
-  return apiRequest<{ quests: Quest[] }>('/api/quests');
+export async function getQuests(forceRefresh = false): Promise<{ quests: Quest[] }> {
+  const url = forceRefresh ? '/api/quests?refresh=true' : '/api/quests';
+  return apiRequest<{ quests: Quest[] }>(url);
 }
 
 export async function completeQuest(questId: string): Promise<{ success: boolean; message?: string }> {

@@ -8,7 +8,8 @@ import (
 
 func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	questsList, err := s.questEngine.GetNormalizedQuests()
+	forceRefresh := r.URL.Query().Get("refresh") == "true"
+	questsList, err := s.questEngine.GetNormalizedQuests(forceRefresh)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

@@ -1,6 +1,5 @@
 import React from 'react';
-import { IconUser, IconSparkles, IconLogOut } from '../icons';
-import { useAuth } from '../../context/AuthContext';
+import { IconUser, IconSparkles } from '../icons';
 import { useI18n } from '../../context/I18nContext';
 
 export type NavTab = 'account' | 'quests';
@@ -11,7 +10,6 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
-  const { logout } = useAuth();
   const { t } = useI18n();
 
   const navItems = [
@@ -38,10 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
       </nav>
 
       <div className="sidebar-footer">
-        <button className="sign-out" onClick={logout} aria-label={t('signOut')}>
-          <IconLogOut size={18} />
-          <span>{t('signOut')}</span>
-        </button>
         <a
           href="https://nixlabs.tech"
           target="_blank"
