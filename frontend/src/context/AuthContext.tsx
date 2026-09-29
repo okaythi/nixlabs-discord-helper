@@ -46,22 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  // Listen for browser handoff callback notifications via SSE or interval polling when not authenticated
-  useEffect(() => {
-    if (isAuthenticated) return;
-    const interval = setInterval(() => {
-      checkSession().then(res => {
-        if (res.authenticated && res.user) {
-          setUser(res.user);
-          setAccount(res.account || null);
-          setIsAuthenticated(true);
-        }
-      }).catch(() => {});
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
-
   const login = async (identifier: string, pass: string) => {
     const res = await apiLogin(identifier, pass);
     if (!res.success) {
