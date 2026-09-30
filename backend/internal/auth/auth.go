@@ -257,7 +257,7 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Nixlabs-Client", "discord-helper")
-	req.Header.Set("X-Nixlabs-Client-Version", "1.0.12")
+	req.Header.Set("X-Nixlabs-Client-Version", "1.0.13")
 	req.Header.Set("X-Request-ID", fmt.Sprintf("dh-%d", time.Now().UnixNano()))
 
 	resp, err := m.client.Do(req)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -215,6 +216,10 @@ func (e *Engine) FetchRawQuests(force bool) ([]map[string]interface{}, error) {
 }
 
 func (e *Engine) fetchRawQuests(ctx context.Context, force bool) ([]map[string]interface{}, error) {
+	// Bound the entire reload, including retries and rate-limit waits. The quest
+	// itself can run for minutes, so this deadline must not apply to its worker.
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
 	if !force {
 		e.cacheMu.RLock()
 		if e.cachedRaw != nil && time.Now().Before(e.cacheExpiry) {
@@ -302,10 +307,14 @@ func (e *Engine) fetchRawQuests(ctx context.Context, force bool) ([]map[string]i
 			}
 
 			sleepDur := time.Duration(retrySec*float64(time.Second)) + 500*time.Millisecond
+			lastErr = fmt.Errorf("Discord is rate limiting quest loading; try again in %.0f seconds", retrySec)
+			deadline, _ := ctx.Deadline()
+			if attempt == maxRetries-1 || sleepDur >= time.Until(deadline) {
+				return nil, lastErr
+			}
 			if err := waitFor(ctx, sleepDur); err != nil {
 				return nil, err
 			}
-			lastErr = fmt.Errorf("discord API error 429: %s", string(bodyBytes))
 			continue
 		}
 
@@ -508,6 +517,13 @@ func (e *Engine) CancelRunning() {
 	e.broadcast(ev)
 }
 
+func questLoadError(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "Loading quests timed out. Check your connection and refresh quests to try again."
+	}
+	return err.Error()
+}
+
 func (e *Engine) StartQuest(questID string) error {
 	e.mu.Lock()
 	if e.isRunning {
@@ -535,7 +551,7 @@ func (e *Engine) StartQuest(questID string) error {
 		rawList, err := e.fetchRawQuests(ctx, true)
 		if err != nil {
 			if ctx.Err() == nil {
-				e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+				e.broadcast(ProgressEvent{Running: false, Error: questLoadError(err)})
 			}
 			return
 		}
@@ -589,7 +605,7 @@ func (e *Engine) StartAllQuests() error {
 		rawList, err := e.fetchRawQuests(ctx, true)
 		if err != nil {
 			if ctx.Err() == nil {
-				e.broadcast(ProgressEvent{Running: false, Error: err.Error()})
+				e.broadcast(ProgressEvent{Running: false, Error: questLoadError(err)})
 			}
 			return
 		}

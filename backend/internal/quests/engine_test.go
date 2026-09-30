@@ -252,3 +252,57 @@ func TestForcedRefreshDoesNotUseStaleCache(t *testing.T) {
 		t.Fatal("forced refresh used stale cache")
 	}
 }
+
+func TestStartAllQuestsLongRateLimitStopsLoading(t *testing.T) {
+	setHandler(t, func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/api/v9/quests/@me" {
+			return mockResponse(429, `{"retry_after":3600}`), nil
+		}
+		return mockResponse(404, ""), nil
+	})
+	e := NewEngine(client())
+	events := e.Subscribe()
+	defer e.Unsubscribe(events)
+	if err := e.StartAllQuests(); err != nil {
+		t.Fatal(err)
+	}
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.Running {
+				continue
+			}
+			if event.Completed || !strings.Contains(event.Error, "3600 seconds") {
+				t.Fatalf("expected actionable rate-limit failure, got %+v", event)
+			}
+			return
+		case <-timer.C:
+			t.Fatal("complete all remained in loading during a long rate limit")
+		}
+	}
+}
+
+func TestQuestFetchDeadlineCancelsStalledRequest(t *testing.T) {
+	setHandler(t, func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/api/v9/quests/@me" {
+			if _, ok := req.Context().Deadline(); !ok {
+				t.Error("quest request has no deadline")
+			}
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}
+		return mockResponse(404, ""), nil
+	})
+	e := NewEngine(client())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := e.fetchRawQuests(ctx, true)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected deadline error, got %v", err)
+	}
+	if !strings.Contains(questLoadError(err), "timed out") {
+		t.Fatalf("missing timeout explanation: %s", questLoadError(err))
+	}
+}
