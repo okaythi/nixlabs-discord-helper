@@ -17,11 +17,18 @@ export function I18nProvider({
   userLanguage?: string;
   children: React.ReactNode;
 }) {
-  const [locale, setLocale] = useState<LocaleKey>(() => resolveLocale(userLanguage));
+  const [locale, setLocaleState] = useState<LocaleKey>(() => resolveLocale(userLanguage));
+
+  const setLocale = useCallback((l: LocaleKey) => {
+    setLocaleState(l);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('nixlabs_language', l);
+    }
+  }, []);
 
   useEffect(() => {
     if (userLanguage) {
-      setLocale(resolveLocale(userLanguage));
+      setLocaleState(resolveLocale(userLanguage));
     }
   }, [userLanguage]);
 

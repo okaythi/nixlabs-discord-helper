@@ -67,6 +67,9 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    if (response.status === 409 || errorData.captcha || (typeof errorData.error === 'string' && errorData.error.toLowerCase().includes('captcha'))) {
+      return { captcha: true, error: 'captcha_required' } as T;
+    }
     throw new Error(errorData.error || `Request failed with status ${response.status}`);
   }
 

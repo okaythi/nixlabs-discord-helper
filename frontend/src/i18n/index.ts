@@ -16,8 +16,23 @@ export const locales: Record<LocaleKey, Translations> = {
   'fr-be': frBE,
 };
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export function resolveLocale(lang?: string | null): LocaleKey {
-  const raw = lang || (typeof navigator !== 'undefined' ? navigator.language : null);
+  let raw = lang;
+  if (!raw && typeof localStorage !== 'undefined') {
+    raw = localStorage.getItem('nixlabs_language');
+  }
+  if (!raw) {
+    raw = getCookie('_nixlabs_language');
+  }
+  if (!raw && typeof navigator !== 'undefined') {
+    raw = navigator.language;
+  }
   if (!raw) return 'en-uk';
   const clean = raw.toLowerCase().trim().replace('_', '-');
   if (clean === 'fr-be' || clean === 'fr' || clean.startsWith('fr-')) return 'fr-be';

@@ -1074,3 +1074,28 @@
   color: var(--text);
 }
 
+.discord-modal-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.myaccount-token-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.myaccount-token-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+

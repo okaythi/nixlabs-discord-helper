@@ -83,6 +83,11 @@ export const AccountView: React.FC = () => {
   const formatLanguageName = (raw?: string | null): string => {
     if (!raw) return 'English';
     const clean = raw.trim().replace('_', '-');
+    try {
+      const displayName = new Intl.DisplayNames([locale], { type: 'language' }).of(clean);
+      if (displayName) return displayName;
+    } catch {}
+
     const [langCode, regionCode] = clean.split('-');
     const primary = (langCode || '').toLowerCase();
 
@@ -93,11 +98,6 @@ export const AccountView: React.FC = () => {
       }
       return name;
     }
-
-    try {
-      const displayName = new Intl.DisplayNames(['en'], { type: 'language' }).of(clean);
-      if (displayName) return displayName;
-    } catch {}
 
     return clean;
   };
