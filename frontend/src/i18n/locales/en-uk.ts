@@ -57,6 +57,7 @@ export const enUK = {
   discordTokenInvalid: 'Your Discord token is invalid. Replace it in My Account.',
   networkError: "Could not reach accounts.nixlabs.tech. Please check your connection.",
   loginFailed: "Authentication failed.",
+  connectionFailedBanner: "Could not connect. Contact the administrator.",
 
   // Account View
   discordAccountTitle: "Discord Account",

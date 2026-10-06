@@ -57,6 +57,7 @@ export const ja: Translations = {
   discordTokenInvalid: 'Discord トークンが無効です。マイアカウントで更新してください。',
   networkError: "accounts.nixlabs.techに接続できませんでした。通信環境を確認してください。",
   loginFailed: "認証に失敗しました。",
+  connectionFailedBanner: "接続できませんでした。管理者にお問い合わせください。",
 
   discordAccountTitle: "Discordアカウント",
   discordAccountSubtitle: '連携したアカウントの情報を Nixlabs Discord ボットで取得',

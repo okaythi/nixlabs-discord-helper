@@ -1,6 +1,10 @@
-import { apiRequest } from './client';
+import { accountsRequest } from './client';
 import type { DiscordUser } from '../types/discord';
 
 export async function getDiscordUser(forceRefresh = false): Promise<DiscordUser> {
-  return apiRequest<DiscordUser>(forceRefresh ? '/api/discord/user?refresh=true' : '/api/discord/user');
+  return accountsRequest<DiscordUser>(
+    forceRefresh
+      ? '/api/third-party-auth/discord-helper/bot-profile?refresh=true'
+      : '/api/third-party-auth/discord-helper/bot-profile'
+  );
 }

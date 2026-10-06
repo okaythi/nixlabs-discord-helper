@@ -57,6 +57,7 @@ export const ptPT: Translations = {
   discordTokenInvalid: 'O seu token Discord é inválido. Substitua-o em A Minha Conta.',
   networkError: "Não foi possível contactar accounts.nixlabs.tech. Verifique a sua ligação.",
   loginFailed: "Falha na autenticação.",
+  connectionFailedBanner: "Não foi possível conectar. Entre em contacto com o administrador.",
 
   discordAccountTitle: "Conta do Discord",
   discordAccountSubtitle: 'Obtido pelo bot Discord da Nixlabs para a sua conta associada',

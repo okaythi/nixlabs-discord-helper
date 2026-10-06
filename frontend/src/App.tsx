@@ -8,32 +8,33 @@ import { AccountView } from './views/AccountView';
 import { QuestsView } from './views/QuestsView';
 import { SnowflakesView } from './views/SnowflakesView';
 
+import { IosConnectionBanner } from './components/common/IosConnectionBanner';
+
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<NavTab>('account');
 
-  if (isLoading) {
-    return (
-      <div className="auth-screen">
-        <span className="wordmark">{t('brandName')}</span>
-        <p className="loading-text" role="status">
-          {t('loadingAccount')}
-        </p>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginView />;
-  }
-
   return (
-    <Shell activeTab={activeTab} onNavigate={setActiveTab}>
-      {activeTab === 'account' && <AccountView />}
-      {activeTab === 'quests' && <QuestsView />}
-      {activeTab === 'snowflakes' && <SnowflakesView />}
-    </Shell>
+    <>
+      <IosConnectionBanner />
+      {isLoading ? (
+        <div className="auth-screen">
+          <span className="wordmark">{t('brandName')}</span>
+          <p className="loading-text" role="status">
+            {t('loadingAccount')}
+          </p>
+        </div>
+      ) : !isAuthenticated ? (
+        <LoginView />
+      ) : (
+        <Shell activeTab={activeTab} onNavigate={setActiveTab}>
+          {activeTab === 'account' && <AccountView />}
+          {activeTab === 'quests' && <QuestsView />}
+          {activeTab === 'snowflakes' && <SnowflakesView />}
+        </Shell>
+      )}
+    </>
   );
 }
 

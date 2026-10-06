@@ -59,6 +59,7 @@ export const frBE: Translations = {
   discordTokenInvalid: 'Votre jeton Discord est invalide. Remplacez-le dans Mon compte.',
   networkError: "Impossible de joindre accounts.nixlabs.tech. Veuillez vérifier votre connexion.",
   loginFailed: "Échec de l’authentification.",
+  connectionFailedBanner: "Impossible de se connecter. Veuillez contacter l'administrateur.",
 
   // Account View
   discordAccountTitle: "Compte Discord",

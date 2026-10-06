@@ -1,32 +1,31 @@
-import { apiRequest } from './client';
+import { accountsRequest } from './client';
 import type { SessionResponse, LoginResponse } from '../types/auth';
 
 export async function checkSession(): Promise<SessionResponse> {
-  return apiRequest<SessionResponse>('/api/auth/session');
+  return accountsRequest<SessionResponse>('/api/session');
 }
 
 export async function loginInApp(identifier: string, password: string): Promise<LoginResponse> {
-  return apiRequest<LoginResponse>('/api/auth/login', {
+  return accountsRequest<LoginResponse>('/api/login', {
     method: 'POST',
     body: JSON.stringify({ identifier, password }),
   });
 }
 
 export async function logout(): Promise<{ success: boolean }> {
-  return apiRequest<{ success: boolean }>('/api/auth/logout', {
+  return accountsRequest<{ success: boolean }>('/api/logout', {
     method: 'POST',
   });
 }
 
 export async function getRegistrationUrl(): Promise<{ success: boolean; url: string }> {
-  return apiRequest<{ success: boolean; url: string }>('/api/auth/register-url', {
-    method: 'POST',
-  });
+  return {
+    success: true,
+    url: 'https://accounts.nixlabs.tech/login?mode=signup#signup',
+  };
 }
 
 export async function openBrowserUrl(url: string): Promise<{ success: boolean }> {
-  return apiRequest<{ success: boolean }>('/api/auth/open-browser', {
-    method: 'POST',
-    body: JSON.stringify({ url }),
-  });
+  window.open(url, '_blank');
+  return { success: true };
 }

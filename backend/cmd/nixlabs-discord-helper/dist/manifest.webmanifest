@@ -1,0 +1,17 @@
+{
+  "name": "Nixlabs Discord Helper",
+  "short_name": "Discord Helper",
+  "description": "Discord Helper Web (PWA) for nixlabs.tech",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e1f20",
+  "theme_color": "#1e1f20",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

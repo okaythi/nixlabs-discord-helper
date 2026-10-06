@@ -7,6 +7,8 @@ interface AuthContextType {
   account: NixlabsAccount | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isDisconnected: boolean;
+  checkConnection: () => Promise<boolean>;
   login: (identifier: string, pass: string) => Promise<void>;
   createAccountInBrowser: () => Promise<string>;
   logout: () => Promise<void>;
@@ -20,10 +22,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<NixlabsAccount | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDisconnected, setIsDisconnected] = useState(false);
 
   const refreshSession = useCallback(async () => {
     try {
       const res = await checkSession();
+      setIsDisconnected(false);
       if (res.authenticated && res.user && !res.account?.banned) {
         setUser(res.user);
         setAccount(res.account || null);
@@ -34,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(false);
       }
     } catch {
+      setIsDisconnected(true);
       setUser(null);
       setAccount(null);
       setIsAuthenticated(false);
@@ -41,6 +46,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
   }, []);
+
+  const checkConnection = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await checkSession();
+      setIsDisconnected(false);
+      if (res.authenticated && res.user && !res.account?.banned) {
+        setUser(res.user);
+        setAccount(res.account || null);
+        setIsAuthenticated(true);
+      }
+      return true;
+    } catch {
+      setIsDisconnected(true);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => { void checkConnection(); };
+    const handleOffline = () => { setIsDisconnected(true); };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [checkConnection]);
 
   useEffect(() => {
     refreshSession();
@@ -79,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         account,
         isAuthenticated,
         isLoading,
+        isDisconnected,
+        checkConnection,
         login,
         createAccountInBrowser,
         logout,

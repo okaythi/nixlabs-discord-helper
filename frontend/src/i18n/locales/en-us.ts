@@ -57,6 +57,7 @@ export const enUS: Translations = {
   discordTokenInvalid: 'Your Discord token is invalid. Replace it in My Account.',
   networkError: "Could not reach accounts.nixlabs.tech. Please check your connection.",
   loginFailed: "Authentication failed.",
+  connectionFailedBanner: "Could not connect. Contact the administrator.",
 
   discordAccountTitle: "Discord Account",
   discordAccountSubtitle: 'Retrieved with the Nixlabs Discord bot for your linked account',

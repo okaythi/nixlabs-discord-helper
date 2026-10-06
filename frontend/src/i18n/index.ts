@@ -17,14 +17,15 @@ export const locales: Record<LocaleKey, Translations> = {
 };
 
 export function resolveLocale(lang?: string | null): LocaleKey {
-  if (!lang) return 'en-uk';
-  const clean = lang.toLowerCase().trim().replace('_', '-');
-  if (clean === 'fr-be' || clean === 'fr') return 'fr-be';
+  const raw = lang || (typeof navigator !== 'undefined' ? navigator.language : null);
+  if (!raw) return 'en-uk';
+  const clean = raw.toLowerCase().trim().replace('_', '-');
+  if (clean === 'fr-be' || clean === 'fr' || clean.startsWith('fr-')) return 'fr-be';
   if (clean === 'en-uk' || clean === 'en-gb') return 'en-uk';
-  if (clean === 'en-us' || clean === 'en') return 'en-us';
-  if (clean === 'pt-br' || clean === 'pt') return 'pt-br';
+  if (clean === 'en-us' || clean === 'en' || clean.startsWith('en-')) return 'en-us';
+  if (clean === 'pt-br' || clean === 'pt' || clean.startsWith('pt-')) return 'pt-br';
   if (clean === 'pt-pt') return 'pt-pt';
-  if (clean === 'ja' || clean === 'ja-jp') return 'ja';
+  if (clean === 'ja' || clean === 'ja-jp' || clean.startsWith('ja-')) return 'ja';
   return 'en-uk';
 }
 
