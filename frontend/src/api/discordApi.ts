@@ -7,6 +7,10 @@ export interface DiscordLoginResult {
   ticket?: string;
   token_saved?: boolean;
   captcha?: boolean;
+  captcha_sitekey?: string;
+  captcha_service?: string;
+  captcha_rqdata?: string;
+  captcha_rqtoken?: string;
   error?: string;
 }
 
@@ -18,10 +22,20 @@ export async function getDiscordUser(forceRefresh = false): Promise<DiscordUser>
   );
 }
 
-export async function loginDiscord(login: string, password: string): Promise<DiscordLoginResult> {
+export async function loginDiscord(
+  login: string,
+  password: string,
+  captchaKey?: string,
+  captchaRqtoken?: string
+): Promise<DiscordLoginResult> {
   return apiRequest<DiscordLoginResult>('/api/auth/discord/login', {
     method: 'POST',
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({
+      login,
+      password,
+      captcha_key: captchaKey,
+      captcha_rqtoken: captchaRqtoken,
+    }),
   });
 }
 

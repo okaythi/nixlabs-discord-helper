@@ -129,6 +129,9 @@ export const ptBR: Translations = {
   discordDisconnectConfirm: "Tem certeza de que deseja desconectar sua conta do Discord?",
   discordDisconnecting: "Desconectando…",
   discordCaptchaError: "O Discord exigiu uma verificação CAPTCHA. Por favor, use a aba Token para entrar.",
+  discordCaptchaPrompt: "Complete a verificação de segurança para entrar",
+  discordCaptchaNote: "O Discord requer uma verificação rápida para autorizar este acesso.",
+  discordVerifying: "Verificando…",
   discordLoginFailed: "Falha ao entrar no Discord. Verifique suas credenciais.",
   manageInMyAccount: "Gerenciar token no Meu Perfil",
 };

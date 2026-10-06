@@ -1099,3 +1099,45 @@
   text-decoration: underline;
 }
 
+.discord-captcha-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 10px;
+}
+
+.discord-captcha-prompt {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  margin: 0;
+}
+
+.discord-captcha-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.discord-captcha-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 82px;
+  width: 100%;
+  margin: 8px 0;
+  overflow: visible;
+}
+
+.discord-captcha-verifying {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  margin: 0;
+  text-align: center;
+}
+

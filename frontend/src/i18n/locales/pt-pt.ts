@@ -129,6 +129,9 @@ export const ptPT: Translations = {
   discordDisconnectConfirm: "Tem a certeza de que pretende desassociar a sua conta do Discord?",
   discordDisconnecting: "A desassociar…",
   discordCaptchaError: "O Discord exigiu uma verificação CAPTCHA. Por favor, utilize o separador Token.",
+  discordCaptchaPrompt: "Conclua a verificação de segurança para iniciar sessão",
+  discordCaptchaNote: "O Discord requer uma verificação rápida para autorizar este acesso.",
+  discordVerifying: "A verificar…",
   discordLoginFailed: "Falha ao iniciar sessão no Discord. Verifique as suas credenciais.",
   manageInMyAccount: "Gerir token na Minha Conta",
 };

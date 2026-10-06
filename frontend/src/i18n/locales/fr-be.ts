@@ -133,6 +133,9 @@ export const frBE: Translations = {
   discordDisconnectConfirm: "Voulez-vous vraiment déconnecter votre compte Discord ?",
   discordDisconnecting: "Déconnexion…",
   discordCaptchaError: "Discord requiert une vérification CAPTCHA. Veuillez utiliser l'onglet Jeton.",
+  discordCaptchaPrompt: "Complétez la vérification de sécurité pour vous connecter",
+  discordCaptchaNote: "Discord requiert une vérification rapide pour autoriser cet accès.",
+  discordVerifying: "Vérification en cours…",
   discordLoginFailed: "Échec de la connexion à Discord. Vérifiez vos identifiants.",
   manageInMyAccount: "Gérer le jeton dans Mon compte",
 };

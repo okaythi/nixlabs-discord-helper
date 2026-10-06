@@ -129,6 +129,9 @@ export const ja: Translations = {
   discordDisconnectConfirm: "Discordアカウントの連携を解除してもよろしいですか？",
   discordDisconnecting: "解除中…",
   discordCaptchaError: "Discord のセキュリティ認証 (CAPTCHA) が要求されました。「トークン」タブから連携してください。",
+  discordCaptchaPrompt: "ログインするにはセキュリティ認証を完了してください",
+  discordCaptchaNote: "Discordはログインを承認するために簡単な人間確認を要求しています。",
+  discordVerifying: "確認中…",
   discordLoginFailed: "Discord へのログインに失敗しました。認証情報を確認してください。",
   manageInMyAccount: "マイアカウントでトークンを管理",
 };

@@ -131,6 +131,9 @@ export const enUK = {
   discordDisconnectConfirm: "Disconnect your Discord account from Discord Helper?",
   discordDisconnecting: "Disconnecting…",
   discordCaptchaError: "Discord requires CAPTCHA verification. Please use the Token tab to connect.",
+  discordCaptchaPrompt: "Complete security verification to sign in",
+  discordCaptchaNote: "Discord requires a quick human verification to authorize this sign in.",
+  discordVerifying: "Verifying…",
   discordLoginFailed: "Failed to sign in to Discord. Check your credentials.",
   manageInMyAccount: "Manage token in My Account",
 };
