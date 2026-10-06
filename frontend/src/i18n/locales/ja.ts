@@ -130,4 +130,5 @@ export const ja: Translations = {
   discordDisconnecting: "解除中…",
   discordCaptchaError: "Discord のセキュリティ認証 (CAPTCHA) が要求されました。「トークン」タブから連携してください。",
   discordLoginFailed: "Discord へのログインに失敗しました。認証情報を確認してください。",
+  manageInMyAccount: "マイアカウントでトークンを管理",
 };

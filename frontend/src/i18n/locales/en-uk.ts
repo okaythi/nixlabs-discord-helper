@@ -132,6 +132,7 @@ export const enUK = {
   discordDisconnecting: "Disconnecting…",
   discordCaptchaError: "Discord requires CAPTCHA verification. Please use the Token tab to connect.",
   discordLoginFailed: "Failed to sign in to Discord. Check your credentials.",
+  manageInMyAccount: "Manage token in My Account",
 };
 
 export type Translations = typeof enUK;

@@ -134,4 +134,5 @@ export const frBE: Translations = {
   discordDisconnecting: "Déconnexion…",
   discordCaptchaError: "Discord requiert une vérification CAPTCHA. Veuillez utiliser l'onglet Jeton.",
   discordLoginFailed: "Échec de la connexion à Discord. Vérifiez vos identifiants.",
+  manageInMyAccount: "Gérer le jeton dans Mon compte",
 };

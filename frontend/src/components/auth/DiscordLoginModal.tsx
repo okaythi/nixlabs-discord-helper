@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useI18n } from '../../context/I18nContext';
 import { Button } from '../common/Button';
-import { IconDiscord, IconCheckCircle } from '../icons';
-import { loginDiscord, submitDiscordMFA, saveDiscordToken } from '../../api/discordApi';
+import { IconDiscord, IconCheckCircle, IconExternal } from '../icons';
+import { loginDiscord, submitDiscordMFA } from '../../api/discordApi';
 
 interface DiscordLoginModalProps {
   isOpen: boolean;
@@ -17,10 +17,8 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
 }) => {
   const { t } = useI18n();
 
-  const [tab, setTab] = useState<'credentials' | 'token'>('credentials');
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
 
   // 2FA state
   const [mfaTicket, setMfaTicket] = useState<string | null>(null);
@@ -88,32 +86,6 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
     }
   };
 
-  const handleTokenSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanToken = token.trim();
-    if (!cleanToken) return;
-
-    if (cleanToken.length < 20 || cleanToken.length > 256) {
-      setError(t('discordInvalidToken'));
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-    try {
-      await saveDiscordToken(cleanToken);
-      setSuccessMessage(t('discordConnectedSuccess'));
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 800);
-    } catch (err: any) {
-      setError(err?.message || t('discordInvalidToken'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="discord-modal-title">
       <div className="modal-sheet discord-login-sheet" onClick={(e) => e.stopPropagation()}>
@@ -141,29 +113,6 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
           </div>
         ) : (
           <div className="modal-body">
-            {!mfaTicket && (
-              <div className="login-tab-bar" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'credentials'}
-                  className={`login-tab ${tab === 'credentials' ? 'active' : ''}`}
-                  onClick={() => { setTab('credentials'); setError(null); }}
-                >
-                  {t('discordLoginTabCredentials')}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'token'}
-                  className={`login-tab ${tab === 'token' ? 'active' : ''}`}
-                  onClick={() => { setTab('token'); setError(null); }}
-                >
-                  {t('discordLoginTabToken')}
-                </button>
-              </div>
-            )}
-
             {error && (
               <div className="auth-error-banner" role="alert">
                 {error}
@@ -204,7 +153,7 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
                   </Button>
                 </div>
               </form>
-            ) : tab === 'credentials' ? (
+            ) : (
               <form onSubmit={handleCredentialsSubmit} className="discord-auth-form">
                 <div className="form-group">
                   <label htmlFor="discord-login">{t('discordEmailLabel')}</label>
@@ -245,35 +194,17 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
                     {isLoading ? t('discordSigningIn') : t('connectDiscord')}
                   </Button>
                 </div>
-              </form>
-            ) : (
-              <form onSubmit={handleTokenSubmit} className="discord-auth-form">
-                <div className="form-group">
-                  <label htmlFor="discord-token">{t('discordTokenInputLabel')}</label>
-                  <input
-                    id="discord-token"
-                    type="password"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    maxLength={256}
-                    className="text-input mono-text"
-                    placeholder={t('discordTokenInputPlaceholder')}
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    autoFocus
-                    required
-                    disabled={isLoading}
-                  />
-                  <p className="form-hint">{t('discordTokenInputHint')}</p>
-                </div>
-                <div className="form-actions">
-                  <Button variant="ghost" type="button" onClick={onClose} disabled={isLoading}>
-                    {t('cancel')}
-                  </Button>
-                  <Button variant="primary" type="submit" disabled={isLoading || !token.trim()}>
-                    {isLoading ? t('discordSavingToken') : t('discordSaveTokenBtn')}
-                  </Button>
+
+                <div className="discord-modal-footer">
+                  <a
+                    href="https://myaccount.nixlabs.tech/apps"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="myaccount-token-link"
+                  >
+                    <span>{t('manageInMyAccount')}</span>
+                    <IconExternal size={14} />
+                  </a>
                 </div>
               </form>
             )}
