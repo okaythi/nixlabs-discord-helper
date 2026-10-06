@@ -19,11 +19,14 @@ import {
   IconPlay,
   IconRefresh,
   IconCheckCircle,
+  IconDiscord,
 } from '../components/icons';
+import { DiscordLoginModal } from '../components/auth/DiscordLoginModal';
 
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
   const [discordId, setDiscordId] = useState<string | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const storageKey = discordId ? cacheKey('quests', discordId) : null;
 
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -276,8 +279,18 @@ export const QuestsView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="auth-error-banner" role="alert">
-          {error}
+        <div className="auth-error-banner" role="alert" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div>{error}</div>
+          {(error === t('discordTokenMissing') || error === t('discordTokenInvalid')) && (
+            <Button
+              variant="primary"
+              onClick={() => setIsLoginModalOpen(true)}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              <IconDiscord size={16} />
+              <span>{t('connectDiscord')}</span>
+            </Button>
+          )}
         </div>
       )}
 
@@ -379,6 +392,24 @@ export const QuestsView: React.FC = () => {
           })}
         </div>
       )}
+
+      <DiscordLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoading(true);
+          getDiscordUser(true)
+            .then((profile) => {
+              if (profile?.id) {
+                setDiscordId(profile.id);
+                clearRefreshCache(cacheKey('quests', profile.id));
+              }
+              setError(null);
+              void fetchQuestsList(true);
+            })
+            .catch(() => {});
+        }}
+      />
     </div>
   );
 };

@@ -3,11 +3,12 @@ import ISO6391 from 'iso-639-1';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { discordTokenErrorMessage } from '../i18n';
-import { getDiscordUser } from '../api/discordApi';
+import { getDiscordUser, disconnectDiscord } from '../api/discordApi';
 import type { DiscordUser } from '../types/discord';
 import { Avatar } from '../components/common/Avatar';
 import { Button } from '../components/common/Button';
 import { IconDiscord, IconShield, IconRefresh } from '../components/icons';
+import { DiscordLoginModal } from '../components/auth/DiscordLoginModal';
 
 export const AccountView: React.FC = () => {
   const { user, account } = useAuth();
@@ -16,6 +17,8 @@ export const AccountView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const fetchDiscord = useCallback(async (explicitRefresh = false) => {
     setIsRefreshing(explicitRefresh);
@@ -31,6 +34,20 @@ export const AccountView: React.FC = () => {
       setIsRefreshing(false);
     }
   }, [t]);
+
+  const handleDisconnect = async () => {
+    if (!window.confirm(t('discordDisconnectConfirm'))) return;
+    setIsDisconnecting(true);
+    try {
+      await disconnectDiscord();
+      setDiscordUser(null);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to disconnect Discord');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
 
   useEffect(() => {
     void fetchDiscord();
@@ -104,57 +121,109 @@ export const AccountView: React.FC = () => {
 
         <div className="discord-hero-body">
           <div className="discord-avatar-container">
-            <Avatar
-              src={discordUser?.avatar_url}
-              name={discordUser?.global_name || discordUser?.username}
-              size="lg"
-              className="discord-avatar"
-            />
+            {discordUser ? (
+              <Avatar
+                src={discordUser?.avatar_url}
+                name={discordUser?.global_name || discordUser?.username}
+                size="lg"
+                className="discord-avatar"
+              />
+            ) : (
+              <div className="discord-avatar discord-avatar-placeholder">
+                <IconDiscord size={36} color="var(--text-subtle)" />
+              </div>
+            )}
           </div>
 
           <div className="discord-info-header">
             <div className="discord-names">
               <h1 className="discord-display-name">
-                {isLoading ? t('loadingDetails') : (discordUser?.global_name || discordUser?.username || '—')}
+                {isLoading
+                  ? t('loadingDetails')
+                  : discordUser
+                  ? discordUser.global_name || discordUser.username || '—'
+                  : t('discordNotConnected')}
               </h1>
               <p className="discord-username">
-                {discordUser?.username ? `@${discordUser.username}` : ''}
+                {discordUser?.username
+                  ? `@${discordUser.username}`
+                  : !isLoading && !discordUser
+                  ? t('discordConnectPrompt')
+                  : ''}
               </p>
             </div>
 
-            <Button
-              variant="ghost"
-              onClick={() => fetchDiscord(true)}
-              disabled={isLoading || isRefreshing}
-              title={t('retry')}
-              aria-label={t('retry')}
-            >
-              <span className={isRefreshing ? 'refresh-icon is-spinning' : 'refresh-icon'}>
-                <IconRefresh size={16} />
-              </span>
-            </Button>
+            {discordUser && (
+              <Button
+                variant="ghost"
+                onClick={() => fetchDiscord(true)}
+                disabled={isLoading || isRefreshing}
+                title={t('retry')}
+                aria-label={t('retry')}
+              >
+                <span className={isRefreshing ? 'refresh-icon is-spinning' : 'refresh-icon'}>
+                  <IconRefresh size={16} />
+                </span>
+              </Button>
+            )}
           </div>
 
-          {error ? (
+          {!discordUser && !isLoading ? (
+            <div className="discord-connect-actions">
+              <Button
+                variant="primary"
+                className="discord-connect-btn"
+                onClick={() => setIsLoginModalOpen(true)}
+              >
+                <IconDiscord size={18} />
+                <span>{t('connectDiscord')}</span>
+              </Button>
+              {error && error !== t('discordTokenMissing') && (
+                <div className="auth-error-banner" role="alert" style={{ marginTop: '12px' }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          ) : error ? (
             <div className="auth-error-banner" role="alert">
               {error}
+              <Button
+                variant="secondary"
+                onClick={() => setIsLoginModalOpen(true)}
+                style={{ marginTop: '8px' }}
+              >
+                {t('connectDiscord')}
+              </Button>
             </div>
           ) : (
-            <div className="account-meta-grid">
-              <div className="meta-item">
-                <span className="meta-label">{t('creationDateLabel')}</span>
-                <span className="meta-value">
-                  {discordUser?.created_at ? formatCreationDate(discordUser.created_at) : '—'}
-                </span>
+            <>
+              <div className="account-meta-grid">
+                <div className="meta-item">
+                  <span className="meta-label">{t('creationDateLabel')}</span>
+                  <span className="meta-value">
+                    {discordUser?.created_at ? formatCreationDate(discordUser.created_at) : '—'}
+                  </span>
+                </div>
+
+                <div className="meta-item">
+                  <span className="meta-label">{t('userIdLabel')}</span>
+                  <span className="meta-value mono-text">
+                    {discordUser?.id || '—'}
+                  </span>
+                </div>
               </div>
 
-              <div className="meta-item">
-                <span className="meta-label">{t('userIdLabel')}</span>
-                <span className="meta-value mono-text">
-                  {discordUser?.id || '—'}
-                </span>
+              <div className="discord-card-footer">
+                <Button
+                  variant="ghost"
+                  className="disconnect-btn"
+                  onClick={handleDisconnect}
+                  disabled={isDisconnecting}
+                >
+                  {isDisconnecting ? t('discordDisconnecting') : t('discordDisconnect')}
+                </Button>
               </div>
-            </div>
+            </>
           )}
         </div>
       </section>
@@ -202,6 +271,12 @@ export const AccountView: React.FC = () => {
           </div>
         </section>
       )}
+
+      <DiscordLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => void fetchDiscord(true)}
+      />
     </div>
   );
 };

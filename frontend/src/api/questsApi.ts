@@ -29,8 +29,10 @@ export async function cancelQuest(): Promise<{ success: boolean }> {
   });
 }
 
+import { getWorkerBaseUrl } from './client';
+
 export function subscribeQuestProgress(onEvent: (event: QuestProgressEvent) => void): () => void {
-  const eventSource = new EventSource('/api/quests/events');
+  const eventSource = new EventSource(`${getWorkerBaseUrl()}/api/quests/progress`, { withCredentials: true });
   eventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data) as QuestProgressEvent;
