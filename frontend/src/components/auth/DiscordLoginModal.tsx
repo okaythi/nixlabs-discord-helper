@@ -12,8 +12,10 @@ interface DiscordLoginModalProps {
 
 interface CaptchaChallenge {
   sitekey: string;
+  session_id: string;
   rqdata: string;
   rqtoken: string;
+  cookies: string;
 }
 
 const HCAPTCHA_SCRIPT_ID = 'hcaptcha-sdk-script';
@@ -172,11 +174,13 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
     try {
       const res = await loginDiscord(login.trim(), password);
       if (res.captcha) {
-        const sitekey = res.captcha_sitekey || 'a9b5fb07-92ff-493f-86fe-352a2803b3df';
+        const sitekey = res.captcha_sitekey || 'b2b02ab5-7dae-4d6f-830e-7b55634c888b';
         setCaptchaChallenge({
           sitekey,
+          session_id: res.captcha_session_id || '',
           rqdata: res.captcha_rqdata || '',
           rqtoken: res.captcha_rqtoken || '',
+          cookies: res.cookies || '',
         });
         return;
       }
@@ -213,7 +217,9 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
         login.trim(),
         password,
         captchaToken,
-        captchaChallenge.rqtoken
+        captchaChallenge.rqtoken,
+        captchaChallenge.session_id,
+        captchaChallenge.cookies
       );
       if (res.mfa && res.ticket) {
         setCaptchaChallenge(null);
@@ -230,10 +236,15 @@ export const DiscordLoginModal: React.FC<DiscordLoginModalProps> = ({
         return;
       }
       if (res.captcha) {
+        if (res.error === 'invalid-response') {
+          setError(t('discordCaptchaError'));
+        }
         setCaptchaChallenge({
           sitekey: res.captcha_sitekey || captchaChallenge.sitekey,
+          session_id: res.captcha_session_id || captchaChallenge.session_id,
           rqdata: res.captcha_rqdata || '',
           rqtoken: res.captcha_rqtoken || '',
+          cookies: res.cookies || captchaChallenge.cookies,
         });
         const hcaptcha = (window as any).hcaptcha;
         if (widgetIdRef.current !== null && hcaptcha?.reset) {

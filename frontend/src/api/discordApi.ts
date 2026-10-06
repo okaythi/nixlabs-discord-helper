@@ -9,8 +9,10 @@ export interface DiscordLoginResult {
   captcha?: boolean;
   captcha_sitekey?: string;
   captcha_service?: string;
+  captcha_session_id?: string;
   captcha_rqdata?: string;
   captcha_rqtoken?: string;
+  cookies?: string;
   error?: string;
 }
 
@@ -26,7 +28,9 @@ export async function loginDiscord(
   login: string,
   password: string,
   captchaKey?: string,
-  captchaRqtoken?: string
+  captchaRqtoken?: string,
+  captchaSessionId?: string,
+  cookies?: string
 ): Promise<DiscordLoginResult> {
   return apiRequest<DiscordLoginResult>('/api/auth/discord/login', {
     method: 'POST',
@@ -35,6 +39,8 @@ export async function loginDiscord(
       password,
       captcha_key: captchaKey,
       captcha_rqtoken: captchaRqtoken,
+      captcha_session_id: captchaSessionId,
+      cookies: cookies,
     }),
   });
 }

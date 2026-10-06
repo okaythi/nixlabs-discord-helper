@@ -42,9 +42,11 @@ export async function accountsRequest<T>(endpoint: string, options: RequestInit 
 }
 
 export function getWorkerBaseUrl(): string {
-  return typeof window !== 'undefined' && window.location.hostname === 'helper.nixlabs.tech'
-    ? 'https://api-helper.nixlabs.tech'
-    : '';
+  if (typeof window === 'undefined') return 'https://api-helper.nixlabs.tech';
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:8080';
+  }
+  return 'https://api-helper.nixlabs.tech';
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
