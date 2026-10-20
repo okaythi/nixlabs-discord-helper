@@ -1,9 +1,7 @@
 APP_NAME := nixlabs-discord-helper
-VERSION := 1.0.13
+VERSION := 1.0.14
 ARCH := amd64
 DEB_NAME := $(APP_NAME)_$(VERSION)_$(ARCH).deb
-
-VITE := /home/thy/Projects/myaccounts/node_modules/.bin/vite
 
 .PHONY: all frontend backend icons deb clean install
 
@@ -11,7 +9,7 @@ all: frontend backend icons
 
 frontend:
 	@echo "==> Building React frontend with Vite..."
-	cd frontend && $(VITE) build
+	cd frontend && npm run build
 
 backend: frontend
 	@echo "==> Syncing frontend dist to backend..."
@@ -21,8 +19,8 @@ backend: frontend
 	cd backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o nixlabs-discord-helper-bin ./cmd/nixlabs-discord-helper
 
 icons:
-	@echo "==> Generating pristine raster icons for tray & desktop..."
-	gjs assets/generate_icons.js
+	@echo "==> Checking raster icons for tray & desktop..."
+	@which gjs >/dev/null 2>&1 && gjs assets/generate_icons.js || echo "gjs not found; using existing raster icons"
 
 deb: backend icons
 	@echo "==> Assembling Debian package structure..."

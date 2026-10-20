@@ -97,6 +97,8 @@ export const ptBR: Translations = {
   rewardBadge: "+{count} Orbs",
   expiresAt: "Expira em {date}",
   rateLimited: "Limite de requisições do Discord atingido. Aguardando…",
+  loadMoreQuests: "Carregar mais",
+  showingQuestsCount: "Mostrando {count} de {total} missões",
 
   // Quest Types
   questTypeWatchVideo: "Assistir ao vídeo",

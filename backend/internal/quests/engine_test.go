@@ -306,3 +306,30 @@ func TestQuestFetchDeadlineCancelsStalledRequest(t *testing.T) {
 		t.Fatalf("missing timeout explanation: %s", questLoadError(err))
 	}
 }
+
+func TestQuestsSortedMostRecentToOldest(t *testing.T) {
+	e := NewEngine(nil)
+	qOld := questJSON(t, `{"id":"100000000000000000","config":{"starts_at":"2026-09-01T00:00:00Z","task_config":{"tasks":{"WATCH_VIDEO":{"target":5}}}}}`)
+	qMid := questJSON(t, `{"id":"200000000000000000","config":{"starts_at":"2026-10-01T00:00:00Z","task_config":{"tasks":{"WATCH_VIDEO":{"target":5}}}}}`)
+	qNew := questJSON(t, `{"id":"300000000000000000","config":{"starts_at":"2026-10-15T00:00:00Z","task_config":{"tasks":{"WATCH_VIDEO":{"target":5}}}}}`)
+	qSnowflakeNew := questJSON(t, `{"id":"900000000000000000","config":{"task_config":{"tasks":{"WATCH_VIDEO":{"target":5}}}}}`)
+	qSnowflakeOld := questJSON(t, `{"id":"400000000000000000","config":{"task_config":{"tasks":{"WATCH_VIDEO":{"target":5}}}}}`)
+
+	// Feed in arbitrary order
+	normalized := e.normalizeRawQuests([]map[string]interface{}{qOld, qNew, qMid})
+	if len(normalized) != 3 {
+		t.Fatalf("expected 3 normalized quests, got %d", len(normalized))
+	}
+	if normalized[0].ID != "300000000000000000" || normalized[1].ID != "200000000000000000" || normalized[2].ID != "100000000000000000" {
+		t.Fatalf("expected most recent to oldest order by starts_at, got: %s, %s, %s", normalized[0].ID, normalized[1].ID, normalized[2].ID)
+	}
+
+	// Test snowflake fallback ordering
+	sfNormalized := e.normalizeRawQuests([]map[string]interface{}{qSnowflakeOld, qSnowflakeNew})
+	if len(sfNormalized) != 2 {
+		t.Fatalf("expected 2 normalized quests, got %d", len(sfNormalized))
+	}
+	if sfNormalized[0].ID != "900000000000000000" || sfNormalized[1].ID != "400000000000000000" {
+		t.Fatalf("expected most recent to oldest order by snowflake ID, got: %s, %s", sfNormalized[0].ID, sfNormalized[1].ID)
+	}
+}

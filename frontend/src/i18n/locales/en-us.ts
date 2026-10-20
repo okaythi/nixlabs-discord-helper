@@ -97,6 +97,8 @@ export const enUS: Translations = {
   rewardBadge: "+{count} Orbs",
   expiresAt: "Expires {date}",
   rateLimited: "Discord rate limit encountered. Pausing briefly…",
+  loadMoreQuests: "Load more",
+  showingQuestsCount: "Showing {count} of {total} quests",
 
   // Quest Types
   questTypeWatchVideo: "Watch video",

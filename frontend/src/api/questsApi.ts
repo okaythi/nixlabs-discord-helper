@@ -1,9 +1,26 @@
 import { apiRequest } from './client';
 import type { Quest, QuestProgressEvent } from '../types/quests';
 
-export async function getQuests(forceRefresh = false): Promise<{ quests: Quest[] }> {
-  const url = forceRefresh ? '/api/quests?refresh=true' : '/api/quests';
-  return apiRequest<{ quests: Quest[] }>(url);
+export interface QuestsResponse {
+  quests: Quest[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
+}
+
+export async function getQuests(
+  forceRefresh = false,
+  limit?: number,
+  offset?: number
+): Promise<QuestsResponse> {
+  const params = new URLSearchParams();
+  if (forceRefresh) params.set('refresh', 'true');
+  if (limit !== undefined && limit > 0) params.set('limit', String(limit));
+  if (offset !== undefined && offset > 0) params.set('offset', String(offset));
+  const query = params.toString();
+  const url = query ? `/api/quests?${query}` : '/api/quests';
+  return apiRequest<QuestsResponse>(url);
 }
 
 export async function getQuestProgress(): Promise<QuestProgressEvent> {

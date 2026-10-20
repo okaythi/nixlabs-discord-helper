@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+
+	"nixlabs-discord-helper/internal/quests"
 )
 
 func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
@@ -19,8 +22,42 @@ func (s *Server) handleQuests(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
+
+	total := len(questsList)
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	if limitStr != "" {
+		limit, _ := strconv.Atoi(limitStr)
+		offset, _ := strconv.Atoi(offsetStr)
+		if offset < 0 {
+			offset = 0
+		}
+		if limit > 0 {
+			end := offset + limit
+			if offset >= total {
+				questsList = []quests.QuestNormalized{}
+			} else {
+				if end > total {
+					end = total
+				}
+				questsList = questsList[offset:end]
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"quests":   questsList,
+				"total":    total,
+				"limit":    limit,
+				"offset":   offset,
+				"has_more": offset+limit < total,
+			})
+			return
+		}
+	}
+
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"quests": questsList,
+		"quests":   questsList,
+		"total":    total,
+		"has_more": false,
 	})
 }
 

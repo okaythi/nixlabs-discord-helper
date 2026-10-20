@@ -15,6 +15,7 @@ export interface Quest {
   enrolled: boolean;
   completed: boolean;
   completable: boolean;
+  starts_at?: string;
   expires_at?: string;
   orb_quantity?: number;
   icon_url?: string;

@@ -97,6 +97,8 @@ export const ja: Translations = {
   rewardBadge: "+{count} Orbs",
   expiresAt: "{date} に終了",
   rateLimited: "Discordのレートリミットに達しました。一時待機しています…",
+  loadMoreQuests: "さらに読み込む",
+  showingQuestsCount: "{total}件中{count}件のクエストを表示中",
 
   // Quest Types
   questTypeWatchVideo: "動画を視聴",

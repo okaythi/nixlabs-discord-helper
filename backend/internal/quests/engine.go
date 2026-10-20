@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -414,6 +415,7 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 			}
 		}
 
+		startsAt := getString(cfg, "starts_at", "startsAt")
 		expiresAt := getString(cfg, "expires_at", "expiresAt")
 		completable := isCompletable(q, now)
 
@@ -452,6 +454,7 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 			Enrolled:      enrolledAt != "",
 			Completed:     completedAt != "",
 			Completable:   completable,
+			StartsAt:      startsAt,
 			ExpiresAt:     expiresAt,
 			OrbQuantity:   orbQuantity,
 			HeroURL:       heroURL,
@@ -459,7 +462,38 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 		})
 	}
 
+	sortQuestsByRecency(normalized)
 	return normalized
+}
+
+func sortQuestsByRecency(quests []QuestNormalized) {
+	sort.SliceStable(quests, func(i, j int) bool {
+		tsI, sfI := questRecency(quests[i])
+		tsJ, sfJ := questRecency(quests[j])
+		if tsI != tsJ {
+			return tsI > tsJ // most recent (larger timestamp) first
+		}
+		return sfI > sfJ // higher snowflake first
+	})
+}
+
+func questRecency(q QuestNormalized) (int64, uint64) {
+	var ts int64
+	if q.StartsAt != "" {
+		if t, err := time.Parse(time.RFC3339Nano, q.StartsAt); err == nil {
+			ts = t.UnixMilli()
+		} else if t, err := time.Parse(time.RFC3339, q.StartsAt); err == nil {
+			ts = t.UnixMilli()
+		}
+	}
+	var snowflake uint64
+	if idVal, err := strconv.ParseUint(q.ID, 10, 64); err == nil {
+		snowflake = idVal
+		if ts == 0 {
+			ts = int64((idVal >> 22) + 1420070400000)
+		}
+	}
+	return ts, snowflake
 }
 
 func (e *Engine) Subscribe() chan ProgressEvent {

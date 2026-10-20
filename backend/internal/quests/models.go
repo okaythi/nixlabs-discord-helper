@@ -20,6 +20,7 @@ type QuestNormalized struct {
 	Enrolled      bool              `json:"enrolled"`
 	Completed     bool              `json:"completed"`
 	Completable   bool              `json:"completable"`
+	StartsAt      string            `json:"starts_at,omitempty"`
 	ExpiresAt     string            `json:"expires_at,omitempty"`
 	OrbQuantity   int               `json:"orb_quantity,omitempty"`
 	HeroURL       string            `json:"hero_url,omitempty"`

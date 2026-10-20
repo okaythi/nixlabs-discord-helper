@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { getDiscordUser } from '../api/discordApi';
 import { cacheKey, clearRefreshCache, readRefreshCache, writeRefreshCache, REFRESH_INTERVAL_MS } from '../api/localRefreshCache';
@@ -23,6 +23,43 @@ import {
 } from '../components/icons';
 import { DiscordLoginModal } from '../components/auth/DiscordLoginModal';
 
+const DISCORD_EPOCH = 1420070400000n;
+export const QUESTS_PAGE_SIZE = 12;
+
+function getQuestRecency(q: Quest): number {
+  if (q.starts_at) {
+    const parsed = Date.parse(q.starts_at);
+    if (!isNaN(parsed)) return parsed;
+  }
+  if (/^\d+$/.test(q.id)) {
+    try {
+      const val = BigInt(q.id);
+      return Number((val >> 22n) + DISCORD_EPOCH);
+    } catch {}
+  }
+  return 0;
+}
+
+export function sortQuestsByRecency(quests: Quest[]): Quest[] {
+  return [...quests].sort((a, b) => {
+    const tsA = getQuestRecency(a);
+    const tsB = getQuestRecency(b);
+    if (tsA !== tsB) {
+      return tsB - tsA; // Most recent (larger timestamp) first
+    }
+    if (/^\d+$/.test(a.id) && /^\d+$/.test(b.id)) {
+      try {
+        const valA = BigInt(a.id);
+        const valB = BigInt(b.id);
+        if (valA !== valB) {
+          return valB > valA ? 1 : -1;
+        }
+      } catch {}
+    }
+    return b.id.localeCompare(a.id);
+  });
+}
+
 export const QuestsView: React.FC = () => {
   const { t } = useI18n();
   const [discordId, setDiscordId] = useState<string | null>(null);
@@ -33,6 +70,7 @@ export const QuestsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(QUESTS_PAGE_SIZE);
 
   const [activeProgress, setActiveProgress] = useState<QuestProgressEvent | null>(null);
   const [isTrackingProgress, setIsTrackingProgress] = useState(false);
@@ -81,6 +119,7 @@ export const QuestsView: React.FC = () => {
 
   useEffect(() => {
     if (!storageKey) return;
+    setVisibleCount(QUESTS_PAGE_SIZE);
     const cached = readRefreshCache<Quest[]>(storageKey);
     setQuests(cached.value || []);
     setCheckedAt(cached.checkedAt);
@@ -99,6 +138,7 @@ export const QuestsView: React.FC = () => {
   }, [storageKey, checkedAt, activeProgress?.running, fetchQuestsList]);
 
   const handleRefresh = async () => {
+    setVisibleCount(QUESTS_PAGE_SIZE);
     setIsRefreshing(true);
     setError(null);
     try {
@@ -244,6 +284,10 @@ export const QuestsView: React.FC = () => {
   const completableQuests = quests.filter((q) => q.completable && !q.completed);
   const isAnyRunning = activeProgress?.running ?? false;
 
+  const sortedQuests = useMemo(() => sortQuestsByRecency(quests), [quests]);
+  const visibleQuests = useMemo(() => sortedQuests.slice(0, visibleCount), [sortedQuests, visibleCount]);
+  const hasMore = visibleCount < sortedQuests.length;
+
   return (
     <div className="quests-view">
       <div className="view-header-row">
@@ -329,74 +373,92 @@ export const QuestsView: React.FC = () => {
           </Button>
         </div>
       ) : (
-        <div className="quests-grid">
-          {quests.map((quest) => {
-            const isThisRunning = isAnyRunning && activeProgress?.quest_id === quest.id;
-            const canComplete = quest.completable && !quest.completed;
+        <>
+          <div className="quests-grid">
+            {visibleQuests.map((quest) => {
+              const isThisRunning = isAnyRunning && activeProgress?.quest_id === quest.id;
+              const canComplete = quest.completable && !quest.completed;
 
-            return (
-              <div
-                key={quest.id}
-                className={`quest-card${quest.completed ? ' is-completed' : ''}${isThisRunning ? ' is-active' : ''}`}
-              >
-                {quest.hero_url && (
-                  <div
-                    className="quest-hero-banner"
-                    style={{
-                      backgroundImage: `url(${quest.hero_url})`,
-                      backgroundColor: quest.colors?.primary || '#4752c4',
-                    }}
-                  />
-                )}
+              return (
+                <div
+                  key={quest.id}
+                  className={`quest-card${quest.completed ? ' is-completed' : ''}${isThisRunning ? ' is-active' : ''}`}
+                >
+                  {quest.hero_url && (
+                    <div
+                      className="quest-hero-banner"
+                      style={{
+                        backgroundImage: `url(${quest.hero_url})`,
+                        backgroundColor: quest.colors?.primary || '#4752c4',
+                      }}
+                    />
+                  )}
 
-                <div className="quest-card-body">
-                  <div className="quest-card-top">
-                    <span className="quest-task-type">{formatQuestType(quest.task_type, t)}</span>
-                    {quest.orb_quantity && (
-                      <span className="quest-reward-pill">
-                        {t('rewardBadge', { count: quest.orb_quantity })}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="quest-title">{quest.name}</h3>
-                  <p className="quest-game-title">{quest.game_title}</p>
-
-                  <div className="quest-card-footer">
-                    {quest.completed ? (
-                      <div className="quest-status-completed">
-                        <IconCheckCircle size={18} />
-                        <span>{t('questCompleted')}</span>
-                      </div>
-                    ) : (
-                      <Button
-                        variant={canComplete ? 'primary' : 'secondary'}
-                        onClick={() => handleStartSingleQuest(quest.id)}
-                        disabled={!canComplete || isAnyRunning || isRefreshing || !!error || isStartingQuestId === quest.id}
-                        className="quest-action-btn"
-                      >
-                        <IconPlay size={14} />
-                        <span>
-                          {isThisRunning
-                            ? t('running')
-                            : isStartingQuestId === quest.id
-                            ? t('running')
-                            : t('completeQuest')}
+                  <div className="quest-card-body">
+                    <div className="quest-card-top">
+                      <span className="quest-task-type">{formatQuestType(quest.task_type, t)}</span>
+                      {quest.orb_quantity && (
+                        <span className="quest-reward-pill">
+                          {t('rewardBadge', { count: quest.orb_quantity })}
                         </span>
-                      </Button>
-                    )}
+                      )}
+                    </div>
+
+                    <h3 className="quest-title">{quest.name}</h3>
+                    <p className="quest-game-title">{quest.game_title}</p>
+
+                    <div className="quest-card-footer">
+                      {quest.completed ? (
+                        <div className="quest-status-completed">
+                          <IconCheckCircle size={18} />
+                          <span>{t('questCompleted')}</span>
+                        </div>
+                      ) : (
+                        <Button
+                          variant={canComplete ? 'primary' : 'secondary'}
+                          onClick={() => handleStartSingleQuest(quest.id)}
+                          disabled={!canComplete || isAnyRunning || isRefreshing || !!error || isStartingQuestId === quest.id}
+                          className="quest-action-btn"
+                        >
+                          <IconPlay size={14} />
+                          <span>
+                            {isThisRunning
+                              ? t('running')
+                              : isStartingQuestId === quest.id
+                              ? t('running')
+                              : t('completeQuest')}
+                          </span>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          {hasMore && (
+            <div className="quests-pagination-container">
+              <p className="quests-pagination-status">
+                {t('showingQuestsCount', { count: visibleQuests.length, total: sortedQuests.length })}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => setVisibleCount((prev) => prev + QUESTS_PAGE_SIZE)}
+                className="quests-load-more-btn"
+              >
+                {t('loadMoreQuests')}
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <DiscordLoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         onSuccess={() => {
+          setVisibleCount(QUESTS_PAGE_SIZE);
           setIsLoading(true);
           getDiscordUser(true)
             .then((profile) => {
