@@ -2275,6 +2275,7 @@ public:
     }
   }
   void *window() { return (void *)m_window; }
+  bool is_valid() const { return m_webview != nullptr && m_controller != nullptr; }
   void terminate() { PostQuitMessage(0); }
   void dispatch(dispatch_fn_t f) {
     PostThreadMessage(m_main_thread, WM_APP, 0, (LPARAM) new dispatch_fn_t(f));
@@ -2313,21 +2314,25 @@ public:
   }
 
   void navigate(const std::string &url) {
+    if (!m_webview) return;
     auto wurl = widen_string(url);
     m_webview->Navigate(wurl.c_str());
   }
 
   void init(const std::string &js) {
+    if (!m_webview) return;
     auto wjs = widen_string(js);
     m_webview->AddScriptToExecuteOnDocumentCreated(wjs.c_str(), nullptr);
   }
 
   void eval(const std::string &js) {
+    if (!m_webview) return;
     auto wjs = widen_string(js);
     m_webview->ExecuteScript(wjs.c_str(), nullptr);
   }
 
   void set_html(const std::string &html) {
+    if (!m_webview) return;
     m_webview->NavigateToString(widen_string(html).c_str());
   }
 
