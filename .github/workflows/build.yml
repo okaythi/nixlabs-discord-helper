@@ -64,11 +64,23 @@ jobs:
         run: |
           make deb
 
+      - name: Build Windows Native App
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64
+          make windows
+
       - name: Upload Debian Package
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
           path: "*.deb"
+
+      - name: Upload Windows Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: "*.exe"
 
   release:
     needs: package
@@ -80,10 +92,12 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: deb-package
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "*.deb"
+          files: |
+            *.deb
+            *.exe
           generate_release_notes: true

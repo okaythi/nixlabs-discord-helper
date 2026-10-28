@@ -3,7 +3,7 @@ VERSION := 1.0.14
 ARCH := amd64
 DEB_NAME := $(APP_NAME)_$(VERSION)_$(ARCH).deb
 
-.PHONY: all frontend backend icons deb clean install
+.PHONY: all frontend backend icons deb windows clean install
 
 all: frontend backend icons
 
@@ -66,9 +66,21 @@ deb: backend icons
 	dpkg-deb --build --root-owner-group build/deb $(DEB_NAME)
 	@echo "==> Successfully created $(DEB_NAME)"
 
+windows: frontend
+	@echo "==> Building Windows backend binary..."
+	rm -rf backend/cmd/nixlabs-discord-helper/dist
+	cp -r frontend/dist backend/cmd/nixlabs-discord-helper/dist
+	cd backend && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o ../nixlabs-discord-helper-bin.exe ./cmd/nixlabs-discord-helper
+	@echo "==> Building native Windows 11 Direct2D app..."
+	x86_64-w64-mingw32-g++-posix -O2 -std=c++17 -municode \
+		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp \
+		-o nixlabs-discord-helper.exe \
+		-static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdiplus -lshell32 -lole32 -luuid -mwindows
+
 install: deb
 	@echo "==> Installing $(DEB_NAME)..."
 	sudo dpkg -i $(DEB_NAME)
 
 clean:
-	rm -rf frontend/dist backend/nixlabs-discord-helper-bin backend/cmd/nixlabs-discord-helper/dist build $(DEB_NAME)
+	rm -rf frontend/dist backend/nixlabs-discord-helper-bin backend/cmd/nixlabs-discord-helper/dist build $(DEB_NAME) *.exe
