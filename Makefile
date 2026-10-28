@@ -72,10 +72,10 @@ windows: frontend
 	cp -r frontend/dist backend/cmd/nixlabs-discord-helper/dist
 	cd backend && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o ../nixlabs-discord-helper-bin.exe ./cmd/nixlabs-discord-helper
 	@echo "==> Building native Windows 11 Direct2D app..."
-	x86_64-w64-mingw32-g++-posix -O2 -std=c++17 -municode \
+	x86_64-w64-mingw32-g++-posix -O2 -s -std=c++17 -fno-rtti -ffunction-sections -fdata-sections -municode \
 		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp \
 		-o nixlabs-discord-helper.exe \
-		-static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+		-Wl,--gc-sections -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
 		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -mwindows
 
 install: deb

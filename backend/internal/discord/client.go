@@ -14,6 +14,11 @@ import (
 	"nixlabs-discord-helper/internal/config"
 )
 
+var (
+	reAssets = regexp.MustCompile(`/assets/([a-f0-9]+)\.js`)
+	reBN     = regexp.MustCompile(`buildNumber["\s:]+["\s]*(\d{5,7})`)
+)
+
 type Client struct {
 	mu          sync.RWMutex
 	httpClient  *http.Client
@@ -32,6 +37,7 @@ func NewClient() *Client {
 	c := &Client{
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		buildNumber: config.DefaultBuildNumber,
+		superProps:  buildSuperProperties(config.DefaultBuildNumber),
 	}
 	go c.scrapeBuildNumber()
 	return c
@@ -58,12 +64,11 @@ func fetchBuildNumber() int {
 		return config.DefaultBuildNumber
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
 		return config.DefaultBuildNumber
 	}
 
-	reAssets := regexp.MustCompile(`/assets/([a-f0-9]+)\.js`)
 	matches := reAssets.FindAllStringSubmatch(string(body), -1)
 	if len(matches) == 0 {
 		return config.DefaultBuildNumber
@@ -74,14 +79,13 @@ func fetchBuildNumber() int {
 		start = 0
 	}
 
-	reBN := regexp.MustCompile(`buildNumber["\s:]+["\s]*(\d{5,7})`)
 	for i := len(matches) - 1; i >= start; i-- {
 		assetURL := fmt.Sprintf("https://discord.com/assets/%s.js", matches[i][1])
 		aReq, _ := http.NewRequest("GET", assetURL, nil)
 		aReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 		aResp, aErr := client.Do(aReq)
 		if aErr == nil && aResp.StatusCode == 200 {
-			aBody, _ := io.ReadAll(aResp.Body)
+			aBody, _ := io.ReadAll(io.LimitReader(aResp.Body, 2*1024*1024))
 			aResp.Body.Close()
 			if m := reBN.FindStringSubmatch(string(aBody)); len(m) > 1 {
 				if parsed, pErr := strconv.Atoi(m[1]); pErr == nil {

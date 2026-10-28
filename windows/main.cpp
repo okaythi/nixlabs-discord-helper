@@ -109,16 +109,13 @@ static void HandleClick(HWND hwnd, int x, int y) {
     } else if (hitId == HIT_TAB_ACCOUNT) {
         g_state.activeTab = NavTab::Account;
         g_state.scrollY = 0;
-        ApiClient::LoadStateFromDisk(g_state);
     } else if (hitId == HIT_TAB_QUESTS) {
         g_state.activeTab = NavTab::Quests;
         g_state.scrollY = 0;
-        ApiClient::LoadStateFromDisk(g_state);
         ApiClient::FetchQuestsList(g_state, false);
     } else if (hitId == HIT_TAB_SNOWFLAKES) {
         g_state.activeTab = NavTab::Snowflakes;
         g_state.scrollY = 0;
-        ApiClient::LoadStateFromDisk(g_state);
     } else if (hitId == HIT_ECOSYSTEM_LINK) {
         ShellExecuteW(nullptr, L"open", L"https://nixlabs.tech", nullptr, nullptr, SW_SHOWNORMAL);
     } else if (hitId == HIT_LOGIN_SHOW_FORM) {
@@ -251,6 +248,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_DESTROY:
+        ApiClient::FlushStateIfDirty(g_state);
         PostQuitMessage(0);
         return 0;
     }

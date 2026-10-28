@@ -2,10 +2,11 @@
 #include "app_state.h"
 
 namespace ApiClient {
-    std::wstring GetConfigDirPath(bool ensureCreated = true);
+    const std::wstring& GetConfigDirPath();
     void LoadStateFromDisk(AppState& state);
     void SaveAuthToDisk(AppState& state);
     void SaveQuestsCacheToDisk(AppState& state);
+    void FlushStateIfDirty(AppState& state);
 
     void StartInitialSessionCheck(AppState& state);
     void PerformLogin(AppState& state, const std::wstring& identifier, const std::wstring& password);

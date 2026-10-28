@@ -68,7 +68,8 @@ func (s *Server) Routes() http.Handler {
 			cleanPath = "index.html"
 		}
 
-		if _, err := s.distFS.Open(cleanPath); err != nil {
+		f, err := s.distFS.Open(cleanPath)
+		if err != nil {
 			indexFile, err := s.distFS.Open("index.html")
 			if err != nil {
 				http.NotFound(w, r)
@@ -79,6 +80,7 @@ func (s *Server) Routes() http.Handler {
 			_, _ = io.Copy(w, indexFile)
 			return
 		}
+		_ = f.Close()
 
 		fileServer.ServeHTTP(w, r)
 	})

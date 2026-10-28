@@ -141,7 +141,7 @@ func (e *Engine) persistCacheToDisk() {
 	}
 	e.cacheMu.RUnlock()
 
-	if b, err := json.MarshalIndent(cacheData, "", "  "); err == nil {
+	if b, err := json.Marshal(cacheData); err == nil {
 		_ = os.WriteFile(cachePath, b, 0600)
 	}
 }
@@ -467,14 +467,35 @@ func (e *Engine) normalizeRawQuests(rawList []map[string]interface{}) []QuestNor
 }
 
 func sortQuestsByRecency(quests []QuestNormalized) {
-	sort.SliceStable(quests, func(i, j int) bool {
-		tsI, sfI := questRecency(quests[i])
-		tsJ, sfJ := questRecency(quests[j])
-		if tsI != tsJ {
-			return tsI > tsJ // most recent (larger timestamp) first
+	if len(quests) <= 1 {
+		return
+	}
+	type recencyKey struct {
+		ts int64
+		sf uint64
+	}
+	keys := make([]recencyKey, len(quests))
+	for i := range quests {
+		keys[i].ts, keys[i].sf = questRecency(quests[i])
+	}
+	// Sort quests and keys together using pre-computed keys (O(N) key parsing instead of O(N log N))
+	indices := make([]int, len(quests))
+	for i := range indices {
+		indices[i] = i
+	}
+	sort.SliceStable(indices, func(i, j int) bool {
+		ki := keys[indices[i]]
+		kj := keys[indices[j]]
+		if ki.ts != kj.ts {
+			return ki.ts > kj.ts
 		}
-		return sfI > sfJ // higher snowflake first
+		return ki.sf > kj.sf
 	})
+	sorted := make([]QuestNormalized, len(quests))
+	for i, idx := range indices {
+		sorted[i] = quests[idx]
+	}
+	copy(quests, sorted)
 }
 
 func questRecency(q QuestNormalized) (int64, uint64) {

@@ -80,120 +80,111 @@ bool ExtractJsonBool(const std::string& json, const char* key, bool defaultVal =
     return defaultVal;
 }
 
-// Baseline GetConfigDirPath: mirrors backend/internal/config/config.go
-// Calls SHGetFolderPathW / CreateDirectoryW / SetFileAttributesW on every call
-std::wstring GetConfigDirPath(bool ensureCreated) {
-    wchar_t xdg[MAX_PATH] = {0};
-    DWORD len = GetEnvironmentVariableW(L"XDG_CONFIG_HOME", xdg, MAX_PATH);
-    std::wstring baseDir;
-    if (len > 0 && len < MAX_PATH) {
-        baseDir = xdg;
-    } else {
-        wchar_t appData[MAX_PATH] = {0};
-        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData))) {
-            baseDir = appData;
+// Pass 2 Optimization: Cache config directory path & creation once per process lifetime
+const std::wstring& GetConfigDirPath() {
+    static std::once_flag s_once;
+    static std::wstring s_dir;
+    std::call_once(s_once, []() {
+        wchar_t xdg[MAX_PATH] = {0};
+        DWORD len = GetEnvironmentVariableW(L"XDG_CONFIG_HOME", xdg, MAX_PATH);
+        std::wstring baseDir;
+        if (len > 0 && len < MAX_PATH) {
+            baseDir = xdg;
         } else {
-            baseDir = L".";
+            wchar_t appData[MAX_PATH] = {0};
+            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData))) {
+                baseDir = appData;
+            } else {
+                baseDir = L".";
+            }
         }
-    }
-    std::wstring dir = baseDir + L"\\nixlabs-discord-helper";
-    if (ensureCreated) {
-        CreateDirectoryW(baseDir.c_str(), nullptr);
-        CreateDirectoryW(dir.c_str(), nullptr);
-        SetFileAttributesW(dir.c_str(), FILE_ATTRIBUTE_NORMAL);
-    }
-    return dir;
+        s_dir = baseDir + L"\\nixlabs-discord-helper";
+        CreateDirectoryW(s_dir.c_str(), nullptr);
+    });
+    return s_dir;
 }
 
-// Baseline synchronous small-chunk file reader
-std::string ReadSmallFileSync(const std::wstring& path) {
-    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+// Pass 2 Optimization: Single sequential read using FILE_FLAG_SEQUENTIAL_SCAN and GetFileSizeEx (1 ReadFile syscall instead of 512-byte loop)
+std::string ReadSequentialFile(const std::wstring& path) {
+    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) return "";
-    std::string content;
-    char buf[512];
-    DWORD bytesRead = 0;
-    while (ReadFile(hFile, buf, sizeof(buf), &bytesRead, nullptr) && bytesRead > 0) {
-        content.append(buf, bytesRead);
+    LARGE_INTEGER fileSize = {0};
+    if (!GetFileSizeEx(hFile, &fileSize) || fileSize.QuadPart <= 0 || fileSize.QuadPart > (4 * 1024 * 1024)) {
+        CloseHandle(hFile);
+        return "";
     }
+    std::string content(static_cast<size_t>(fileSize.QuadPart), '\0');
+    DWORD bytesRead = 0;
+    ReadFile(hFile, &content[0], static_cast<DWORD>(content.size()), &bytesRead, nullptr);
+    content.resize(bytesRead);
     CloseHandle(hFile);
     return content;
 }
 
-// Baseline synchronous unbatched file writer with FlushFileBuffers
-void WriteFileSyncFlush(const std::wstring& path, const std::string& data) {
+// Pass 2 Optimization: Single buffered sequential write without blocking UI thread on FlushFileBuffers barriers
+void WriteSequentialFile(const std::wstring& path, const std::string& data) {
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) return;
     DWORD written = 0;
     WriteFile(hFile, data.data(), (DWORD)data.size(), &written, nullptr);
-    FlushFileBuffers(hFile);
     CloseHandle(hFile);
 }
 
 void LoadStateFromDisk(AppState& state) {
-    std::wstring dir = GetConfigDirPath(true);
+    std::string stateData = ReadSequentialFile(GetConfigDirPath() + L"\\state.json");
+    std::lock_guard<std::mutex> lk(state.mu);
+    if (!stateData.empty()) {
+        std::string th = ExtractJsonString(stateData, "theme");
+        if (!th.empty()) state.darkMode = (th != "light");
 
-    // 1. Read theme.json
-    std::string themeData = ReadSmallFileSync(dir + L"\\theme.json");
-    if (!themeData.empty()) {
-        std::string th = ExtractJsonString(themeData, "theme");
-        state.darkMode = (th != "light");
-    }
+        std::string loc = ExtractJsonString(stateData, "locale");
+        if (!loc.empty()) state.locale = ResolveLocaleFromCode(Utf8ToWide(loc));
 
-    // 2. Read locale.json
-    std::string localeData = ReadSmallFileSync(dir + L"\\locale.json");
-    if (!localeData.empty()) {
-        std::string loc = ExtractJsonString(localeData, "locale");
-        if (!loc.empty()) {
-            state.locale = ResolveLocaleFromCode(Utf8ToWide(loc));
-        }
-    }
-
-    // 3. Read auth.json
-    std::string authData = ReadSmallFileSync(GetConfigDirPath(true) + L"\\auth.json");
-    if (!authData.empty()) {
-        state.sessionCookie = ExtractJsonString(authData, "session_cookie");
-        state.authUpdatedAt = ExtractJsonString(authData, "updated_at");
-        state.user.name = Utf8ToWide(ExtractJsonString(authData, "name"));
-        state.user.handle = Utf8ToWide(ExtractJsonString(authData, "handle"));
-        state.user.email = Utf8ToWide(ExtractJsonString(authData, "email"));
-        state.user.role = Utf8ToWide(ExtractJsonString(authData, "role"));
-        state.user.language = Utf8ToWide(ExtractJsonString(authData, "language"));
+        state.sessionCookie = ExtractJsonString(stateData, "session_cookie");
+        state.authUpdatedAt = ExtractJsonString(stateData, "updated_at");
+        state.user.name = Utf8ToWide(ExtractJsonString(stateData, "name"));
+        state.user.handle = Utf8ToWide(ExtractJsonString(stateData, "handle"));
+        state.user.email = Utf8ToWide(ExtractJsonString(stateData, "email"));
+        state.user.role = Utf8ToWide(ExtractJsonString(stateData, "role"));
+        state.user.language = Utf8ToWide(ExtractJsonString(stateData, "language"));
         if (!state.sessionCookie.empty() && !state.user.handle.empty()) {
             state.isAuthenticated = true;
             state.isLoadingAuth = false;
         }
     }
-
-    // 4. Read quests_cache.json
-    std::string cacheData = ReadSmallFileSync(GetConfigDirPath(true) + L"\\quests_cache.json");
-    if (!cacheData.empty() && state.quests.empty()) {
+    if (state.quests.empty()) {
         PopulateSampleQuestsIfOffline(state);
-    } else if (state.quests.empty()) {
-        PopulateSampleQuestsIfOffline(state);
-        SaveQuestsCacheToDisk(state);
     }
 }
 
 void SaveAuthToDisk(AppState& state) {
-    std::wstring dir = GetConfigDirPath(true);
-    std::ostringstream oss;
-    oss << "{\n"
-        << "  \"session_cookie\": \"" << state.sessionCookie << "\",\n"
-        << "  \"updated_at\": \"" << state.authUpdatedAt << "\",\n"
-        << "  \"user\": {\n"
-        << "    \"name\": \"" << WideToUtf8(state.user.name) << "\",\n"
-        << "    \"handle\": \"" << WideToUtf8(state.user.handle) << "\",\n"
-        << "    \"email\": \"" << WideToUtf8(state.user.email) << "\",\n"
-        << "    \"role\": \"" << WideToUtf8(state.user.role) << "\",\n"
-        << "    \"language\": \"" << WideToUtf8(state.user.language) << "\"\n"
-        << "  }\n"
-        << "}\n";
-    WriteFileSyncFlush(dir + L"\\auth.json", oss.str());
+    state.stateDirty.store(true, std::memory_order_release);
+}
 
-    std::string themeJson = std::string("{\n  \"theme\": \"") + (state.darkMode ? "dark" : "light") + "\"\n}\n";
-    WriteFileSyncFlush(dir + L"\\theme.json", themeJson);
+void FlushStateIfDirty(AppState& state) {
+    if (!state.stateDirty.exchange(false, std::memory_order_acq_rel)) return;
+    std::ostringstream oss;
+    oss << "{\"theme\":\"" << (state.darkMode ? "dark" : "light")
+        << "\",\"locale\":\"" << WideToUtf8(GetLocaleCode(state.locale))
+        << "\",\"session_cookie\":\"" << state.sessionCookie
+        << "\",\"updated_at\":\"" << state.authUpdatedAt
+        << "\",\"user\":{\"name\":\"" << WideToUtf8(state.user.name)
+        << "\",\"handle\":\"" << WideToUtf8(state.user.handle)
+        << "\",\"email\":\"" << WideToUtf8(state.user.email)
+        << "\",\"role\":\"" << WideToUtf8(state.user.role)
+        << "\",\"language\":\"" << WideToUtf8(state.user.language)
+        << "\"},\"quests\":[";
+    for (size_t i = 0; i < state.quests.size(); i++) {
+        const auto& q = state.quests[i];
+        if (i > 0) oss << ",";
+        oss << "{\"id\":\"" << q.id
+            << "\",\"done\":" << (int)q.secondsDone
+            << ",\"completed\":" << (q.completed ? "true" : "false") << "}";
+    }
+    oss << "]}";
+    WriteSequentialFile(GetConfigDirPath() + L"\\state.json", oss.str());
 }
 
 std::string HttpRequestSync(const wchar_t* host, const wchar_t* path, const wchar_t* method,
@@ -298,7 +289,7 @@ void PerformLogout(AppState& state) {
     state.sessionCookie.clear();
     state.user = SessionUser{};
     state.discordUser = DiscordUser{};
-    DeleteFileW((GetConfigDirPath(true) + L"\\auth.json").c_str());
+    state.stateDirty.store(true, std::memory_order_release);
     if (state.hwnd) InvalidateRect(state.hwnd, nullptr, FALSE);
 }
 

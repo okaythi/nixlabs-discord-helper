@@ -195,5 +195,5 @@ struct AppState {
 
     // Diagnostics / Bench Mode
     bool benchMode = false;
-    HANDLE childBackendProcess = nullptr;
+    std::atomic<bool> stateDirty{false};
 };

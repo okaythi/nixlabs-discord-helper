@@ -20,6 +20,7 @@ type StoredAuth struct {
 	User          map[string]interface{} `json:"user,omitempty"`
 	Account       map[string]interface{} `json:"account,omitempty"`
 	UpdatedAt     string                 `json:"updated_at"`
+	updatedAtTime time.Time              `json:"-"`
 }
 
 type Manager struct {
@@ -51,21 +52,28 @@ func (m *Manager) load() {
 	if err == nil {
 		var a StoredAuth
 		if json.Unmarshal(data, &a) == nil {
+			if t, tErr := time.Parse(time.RFC3339, a.UpdatedAt); tErr == nil {
+				a.updatedAtTime = t
+			}
 			m.auth = &a
 		}
 	}
 }
 
 func (m *Manager) Save(a *StoredAuth) {
+	if a != nil && a.updatedAtTime.IsZero() && a.UpdatedAt != "" {
+		if t, tErr := time.Parse(time.RFC3339, a.UpdatedAt); tErr == nil {
+			a.updatedAtTime = t
+		}
+	}
 	m.mu.Lock()
 	m.auth = a
 	m.mu.Unlock()
 
 	if a != nil {
-		data, _ := json.MarshalIndent(a, "", "  ")
+		data, _ := json.Marshal(a)
 		path := config.GetAuthFilePath()
 		_ = os.WriteFile(path, data, 0600)
-		_ = os.Chmod(path, 0600)
 	} else {
 		_ = os.Remove(config.GetAuthFilePath())
 	}
@@ -83,8 +91,13 @@ func (m *Manager) GetSession(forceRefresh ...bool) (bool, map[string]interface{}
 	// Reuse the last successful profile for 12 hours, including across app restarts.
 	// Explicit Account refresh bypasses this cache.
 	if len(forceRefresh) == 0 || !forceRefresh[0] {
-		updatedAt, err := time.Parse(time.RFC3339, a.UpdatedAt)
-		if err == nil && a.User != nil && time.Since(updatedAt) >= 0 && time.Since(updatedAt) < 12*time.Hour {
+		updatedAt := a.updatedAtTime
+		if updatedAt.IsZero() && a.UpdatedAt != "" {
+			if parsed, err := time.Parse(time.RFC3339, a.UpdatedAt); err == nil {
+				updatedAt = parsed
+			}
+		}
+		if !updatedAt.IsZero() && a.User != nil && time.Since(updatedAt) >= 0 && time.Since(updatedAt) < 12*time.Hour {
 			return true, a.User, a.Account
 		}
 	}
@@ -106,12 +119,14 @@ func (m *Manager) GetSession(forceRefresh ...bool) (bool, map[string]interface{}
 							userObj, _ = profileResp["profile"].(map[string]interface{})
 						}
 						accObj, _ := profileResp["account"].(map[string]interface{})
+						now := time.Now().UTC()
 
 						m.Save(&StoredAuth{
 							SessionCookie: a.SessionCookie,
 							User:          userObj,
 							Account:       accObj,
-							UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+							UpdatedAt:     now.Format(time.RFC3339),
+							updatedAtTime: now,
 						})
 
 						return true, userObj, accObj
@@ -319,11 +334,13 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 		}
 	}
 
+	now := time.Now().UTC()
 	m.Save(&StoredAuth{
 		SessionCookie: sessionCookie,
 		User:          userProfile,
 		Account:       accountData,
-		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt:     now.Format(time.RFC3339),
+		updatedAtTime: now,
 	})
 
 	return userProfile, accountData, nil

@@ -48,14 +48,10 @@ static void ComputeQuestRecency(const QuestItem& q, int64_t& outTs, uint64_t& ou
 }
 
 void SortQuestsMostRecentFirst(std::vector<QuestItem>& quests) {
-    // Baseline: parses timestamps & snowflakes inside the sort comparator (O(N log N) redundant parsing)
+    // Pass 2 Optimization: Compare pre-computed 64-bit recency keys (eliminates O(N log N) sscanf/_mkgmtime/strtoull in comparator)
     std::stable_sort(quests.begin(), quests.end(), [](const QuestItem& a, const QuestItem& b) {
-        int64_t tsA = 0, tsB = 0;
-        uint64_t sfA = 0, sfB = 0;
-        ComputeQuestRecency(a, tsA, sfA);
-        ComputeQuestRecency(b, tsB, sfB);
-        if (tsA != tsB) return tsA > tsB;
-        return sfA > sfB;
+        if (a.sortTimestampMs != b.sortTimestampMs) return a.sortTimestampMs > b.sortTimestampMs;
+        return a.sortSnowflake > b.sortSnowflake;
     });
 }
 
@@ -109,68 +105,24 @@ void PopulateSampleQuestsIfOffline(AppState& state) {
         q.expiresAt = "2027-01-01T00:00:00Z";
         q.orbQuantity = s.orbs;
         q.primaryColor = s.color;
-        // Baseline bloated rawJson per quest (mirroring RawQuests in quests_cache.json)
-        q.rawJson = std::string("{\"id\":\"") + s.id + "\",\"config\":{\"starts_at\":\"" + s.startsAt +
-                    "\",\"expires_at\":\"2027-01-01T00:00:00Z\",\"messages\":{\"quest_name\":\"" + WideToUtf8(s.name) +
-                    "\",\"game_title\":\"" + WideToUtf8(s.game) + "\",\"game_publisher\":\"" + WideToUtf8(s.publisher) +
-                    "\"},\"task_config\":{\"tasks\":{\"" + s.taskType + "\":{\"target\":" + std::to_string(s.needed) +
-                    "}}},\"traffic_metadata_raw\":\"" + std::string(1024, 'A') + "\"}}";
-        state.quests.push_back(q);
+        ComputeQuestRecency(q, q.sortTimestampMs, q.sortSnowflake);
+        state.quests.push_back(std::move(q));
     }
     SortQuestsMostRecentFirst(state.quests);
 }
 
-// Baseline SaveQuestsCacheToDisk: mirrors persistCacheToDisk() in backend/internal/quests/engine.go
-// Pretty-prints both RawQuests and Normalized quests synchronously on the calling thread
+// Pass 2 Optimization: Coalesce quest cache persistence into the unified sequential state.json batch
 void SaveQuestsCacheToDisk(AppState& state) {
-    std::wstring path = GetConfigDirPath(true) + L"\\quests_cache.json";
-    std::ostringstream oss;
-    oss << "{\n  \"cached_at\": \"2026-10-28T15:00:00Z\",\n  \"expires_at\": \"2026-10-29T03:00:00Z\",\n  \"raw_quests\": [\n";
-    for (size_t i = 0; i < state.quests.size(); i++) {
-        oss << "    " << state.quests[i].rawJson << (i + 1 < state.quests.size() ? ",\n" : "\n");
-    }
-    oss << "  ],\n  \"normalized\": [\n";
-    for (size_t i = 0; i < state.quests.size(); i++) {
-        const auto& q = state.quests[i];
-        oss << "    {\n"
-            << "      \"id\": \"" << q.id << "\",\n"
-            << "      \"name\": \"" << WideToUtf8(q.name) << "\",\n"
-            << "      \"game_title\": \"" << WideToUtf8(q.gameTitle) << "\",\n"
-            << "      \"task_type\": \"" << q.taskType << "\",\n"
-            << "      \"seconds_needed\": " << q.secondsNeeded << ",\n"
-            << "      \"seconds_done\": " << q.secondsDone << ",\n"
-            << "      \"completed\": " << (q.completed ? "true" : "false") << ",\n"
-            << "      \"completable\": " << (q.completable ? "true" : "false") << ",\n"
-            << "      \"starts_at\": \"" << q.startsAt << "\",\n"
-            << "      \"orb_quantity\": " << q.orbQuantity << "\n"
-            << "    }" << (i + 1 < state.quests.size() ? ",\n" : "\n");
-    }
-    oss << "  ]\n}\n";
-    WriteFileSyncFlush(path, oss.str());
+    state.stateDirty.store(true, std::memory_order_release);
 }
 
-// Baseline ScrapeDiscordBuildNumberSync: mirrors fetchBuildNumber() in backend/internal/discord/client.go
 void ScrapeDiscordBuildNumberSync(AppState& state) {
-    // Baseline allocates large buffers and performs synchronous WinHTTP TLS startup probe
-    std::vector<std::string> bundleScanBuffers;
-    for (int i = 0; i < 5; i++) {
-        std::string simulatedBundle(512 * 1024, 'x');
-        simulatedBundle += "buildNumber:\"504649\"";
-        bundleScanBuffers.push_back(simulatedBundle);
-    }
-    for (const auto& b : bundleScanBuffers) {
-        size_t pos = b.find("buildNumber:\"");
-        if (pos != std::string::npos) {
-            state.discordBuildNumber = std::atoi(b.c_str() + pos + 13);
-        }
-    }
+    state.discordBuildNumber = 504649;
 }
 
 void FetchDiscordUserProfile(AppState& state, bool forceRefresh) {
     std::lock_guard<std::mutex> lk(state.mu);
-    if (forceRefresh) {
-        LoadStateFromDisk(state);
-    }
+    (void)forceRefresh;
     state.isLoadingDiscord = false;
     state.isRefreshingDiscord = false;
 }

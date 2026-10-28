@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -96,7 +97,11 @@ func (s *Server) handleOpenBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func(target string) {
-		_ = exec.Command("xdg-open", target).Start()
+		if runtime.GOOS == "windows" {
+			_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", target).Start()
+		} else {
+			_ = exec.Command("xdg-open", target).Start()
+		}
 	}(reqBody.URL)
 
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
