@@ -1,5 +1,6 @@
 #include "ui_renderer.h"
 #include "i18n.h"
+#include "image_cache.h"
 #include <algorithm>
 
 static UINT32 BlendColor(UINT32 baseRgb, UINT32 targetRgb, int pct) {
@@ -109,18 +110,25 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
     FillRoundRect(W - 188.0f, 18.0f, 160.0f, 36.0f, 18.0f, subtle);
     DrawRoundRect(W - 188.0f, 18.0f, 160.0f, 36.0f, 18.0f, border);
     FillRoundRect(W - 183.0f, 23.0f, 26.0f, 26.0f, 13.0f, accent, 0.25f);
-    std::wstring initCh = state.user.name.empty() ? L"U" : state.user.name.substr(0, 1);
-    DrawTextStr(initCh, m_fmtSmall, W - 174.0f, 28.0f, 16.0f, 18.0f, text);
+    bool avDrawn = false;
+    if (!state.user.avatarUrl.empty()) {
+        avDrawn = ImageCache::Instance().DrawCircleImage(m_rt, state.user.avatarUrl, W - 170.0f, 36.0f, 13.0f);
+    }
+    if (!avDrawn) {
+        std::wstring initCh = state.user.name.empty() ? L"U" : state.user.name.substr(0, 1);
+        DrawTextStr(initCh, m_fmtSmall, W - 174.0f, 28.0f, 16.0f, 18.0f, text);
+    }
     DrawTextStr(L"@" + (state.user.handle.empty() ? L"user" : state.user.handle), m_fmtSmall, W - 151.0f, 28.0f, 88.0f, 20.0f, text);
     DrawLogoutIcon(W - 44.0f, 36.0f, state.hoveredTargetId == HIT_LOGOUT ? 0xFFB4AB : muted, headerAlpha);
     RegisterHit(state, HIT_LOGOUT, W - 60.0f, 18.0f, 32.0f, 36.0f);
 
     // Sidebar (Wide mode) or Compact Top Navigation (Snap Layouts / narrow widths)
+    UINT32 iconInk = 0x243342;
     struct TabDef { NavTab tab; int hit; const wchar_t* label; UINT32 dotColor; };
     TabDef tabs[] = {
-        {NavTab::Account, HIT_TAB_ACCOUNT, L.tabAccount, 0xA8C7FA},
-        {NavTab::Quests, HIT_TAB_QUESTS, L.tabQuests, 0xCBB7F2},
-        {NavTab::Snowflakes, HIT_TAB_SNOWFLAKES, L.tabSnowflakes, 0x91D4F6}
+        {NavTab::Account, HIT_TAB_ACCOUNT, L.tabAccount, state.darkMode ? 0xA8C7FA : 0xC2D8FB},
+        {NavTab::Quests, HIT_TAB_QUESTS, L.tabQuests, state.darkMode ? 0xCBB7F2 : 0xE0D1FA},
+        {NavTab::Snowflakes, HIT_TAB_SNOWFLAKES, L.tabSnowflakes, state.darkMode ? 0x91D4F6 : 0xB8E7FB}
     };
 
     if (W > 700.0f) {
@@ -136,7 +144,14 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
             } else if (hovered) {
                 FillRoundRect(16.0f, y, 208.0f, 44.0f, 10.0f, hoverSubtle, 0.65f);
             }
-            FillRoundRect(28.0f, y + 8.0f, 28.0f, 28.0f, 14.0f, t.dotColor);
+            FillRoundRect(28.0f, y + 7.0f, 30.0f, 30.0f, 15.0f, t.dotColor);
+            if (t.tab == NavTab::Account) {
+                DrawIconUser(43.0f, y + 22.0f, 17.0f, iconInk);
+            } else if (t.tab == NavTab::Quests) {
+                DrawIconSparkles(43.0f, y + 22.0f, 17.0f, iconInk);
+            } else if (t.tab == NavTab::Snowflakes) {
+                DrawIconSnowflake(43.0f, y + 22.0f, 17.0f, iconInk);
+            }
             DrawTextStr(t.label, m_fmtBodyBold, 68.0f, y + 12.0f, 148.0f, 24.0f, active ? activeText : text);
             RegisterHit(state, t.hit, 16.0f, y, 208.0f, 44.0f);
             y += 50.0f;
@@ -153,7 +168,18 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
             if (active) {
                 FillRoundRect(tx + 2.0f, 64.0f, tabW - 4.0f, 26.0f, 8.0f, activeBg);
             }
-            DrawTextStr(tabs[i].label, m_fmtSmall, tx + 10.0f, 69.0f, tabW - 20.0f, 18.0f, active ? activeText : muted);
+            float badgeSz = 20.0f;
+            float bx = tx + 6.0f;
+            float by = 67.0f;
+            FillRoundRect(bx, by, badgeSz, badgeSz, 10.0f, tabs[i].dotColor);
+            if (tabs[i].tab == NavTab::Account) {
+                DrawIconUser(bx + 10.0f, by + 10.0f, 12.0f, iconInk);
+            } else if (tabs[i].tab == NavTab::Quests) {
+                DrawIconSparkles(bx + 10.0f, by + 10.0f, 12.0f, iconInk);
+            } else if (tabs[i].tab == NavTab::Snowflakes) {
+                DrawIconSnowflake(bx + 10.0f, by + 10.0f, 12.0f, iconInk);
+            }
+            DrawTextStr(tabs[i].label, m_fmtSmall, bx + 26.0f, 70.0f, tabW - 32.0f, 18.0f, active ? activeText : muted);
             RegisterHit(state, tabs[i].hit, tx, 62.0f, tabW, 28.0f);
         }
     }
@@ -196,6 +222,9 @@ void UiRenderer::RenderAccountTab(AppState& state, float x, float y, float w) {
         ? ParseHexBannerColor(state.discordUser.bannerColor, 0x5865F2)
         : (state.darkMode ? 0x323436 : 0xE7ECF4);
     FillRoundRect(x, y, w, 110.0f, 16.0f, bannerCol);
+    if (state.discordUser.connected && !state.discordUser.bannerUrl.empty()) {
+        ImageCache::Instance().DrawRoundedImage(m_rt, state.discordUser.bannerUrl, D2D1::RectF(x, y, x + w, y + 110.0f), 16.0f, 16.0f);
+    }
     DrawRoundRect(x, y, w, 280.0f, 16.0f, border);
 
     FillRoundRect(x + w - 98.0f, y + 14.0f, 82.0f, 26.0f, 12.0f, 0x101214, 0.7f);
@@ -203,13 +232,20 @@ void UiRenderer::RenderAccountTab(AppState& state, float x, float y, float w) {
 
     FillRoundRect(x + 20.0f, y + 70.0f, 80.0f, 80.0f, 40.0f, cardBg);
     FillRoundRect(x + 24.0f, y + 74.0f, 72.0f, 72.0f, 36.0f, 0x5865F2);
-    std::wstring avGlyph = L"?";
-    if (state.discordUser.connected) {
-        const std::wstring& disp = !state.discordUser.globalName.empty() ? state.discordUser.globalName : state.discordUser.username;
-        if (!disp.empty()) avGlyph = disp.substr(0, 1);
-        else avGlyph = L"D";
+    bool discordAvDrawn = false;
+    if (state.discordUser.connected && !state.discordUser.avatarUrl.empty()) {
+        discordAvDrawn = ImageCache::Instance().DrawCircleImage(m_rt, state.discordUser.avatarUrl, x + 60.0f, y + 110.0f, 36.0f);
     }
-    DrawTextStr(avGlyph, m_fmtTitle, x + 50.0f, y + 92.0f, 36.0f, 36.0f, 0xFFFFFF);
+    if (!discordAvDrawn) {
+        std::wstring avGlyph = L"?";
+        if (state.discordUser.connected) {
+            const std::wstring& disp = !state.discordUser.globalName.empty() ? state.discordUser.globalName : state.discordUser.username;
+            if (!disp.empty()) avGlyph = disp.substr(0, 1);
+            else avGlyph = L"D";
+        }
+        DrawTextStr(avGlyph, m_fmtTitle, x + 50.0f, y + 92.0f, 36.0f, 36.0f, 0xFFFFFF);
+    }
+    DrawRoundRect(x + 20.0f, y + 70.0f, 80.0f, 80.0f, 40.0f, border, 2.0f);
 
     std::wstring heroTitle = state.isLoadingDiscord
         ? L.loadingDetails
@@ -322,9 +358,12 @@ void UiRenderer::RenderQuestsTab(AppState& state, float x, float y, float w) {
 
         FillRoundRect(cx, cy, cardW, cardH, 14.0f, cardBg, 0.92f);
         FillRoundRect(cx, cy, cardW, 56.0f, 14.0f, q.primaryColor);
+        if (!q.heroUrl.empty()) {
+            ImageCache::Instance().DrawRoundedImage(m_rt, q.heroUrl, D2D1::RectF(cx, cy, cx + cardW, cy + 56.0f), 14.0f, 14.0f);
+        }
         DrawRoundRect(cx, cy, cardW, cardH, 14.0f, cardHovered ? accent : border, cardHovered ? 1.5f : 1.0f);
 
-        DrawTextStr(q.taskTypeW, m_fmtSmall, cx + 16.0f, cy + 66.0f, 180.0f, 18.0f, muted);
+        DrawTextStr(FormatQuestType(q.taskType, state.locale), m_fmtSmall, cx + 16.0f, cy + 66.0f, 180.0f, 18.0f, muted);
         if (q.orbQuantity > 0) {
             std::wstring orbText = L"+" + std::to_wstring(q.orbQuantity) + L" Orbs";
             FillRoundRect(cx + cardW - 88.0f, cy + 64.0f, 72.0f, 22.0f, 10.0f, 0x252C39);

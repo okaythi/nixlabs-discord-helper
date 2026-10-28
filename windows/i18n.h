@@ -81,6 +81,12 @@ struct LocaleStrings {
     const wchar_t* stopQuest;
     const wchar_t* loadMoreQuests;
 
+    const wchar_t* questTypeWatchVideo;
+    const wchar_t* questTypeWatchVideoOnMobile;
+    const wchar_t* questTypePlayOnDesktop;
+    const wchar_t* questTypeStreamOnDesktop;
+    const wchar_t* questTypePlayActivity;
+
     const wchar_t* connectDiscord;
     const wchar_t* discordNotConnected;
     const wchar_t* discordConnectPrompt;
@@ -121,6 +127,7 @@ inline const LocaleStrings kLocales[] = {
         L"No Quests", L"There are currently no active completable quests for this account. Check back later!",
         L"Complete all available quests", L"Complete quest", L"Refresh list",
         L"Completed", L"Running\x2026", L"Current Task", L"Stop", L"Load more",
+        L"Watch video", L"Watch video on mobile", L"Play on desktop", L"Stream on desktop", L"Play activity",
         L"Connect Discord", L"No Discord account connected",
         L"Connect your Discord account to complete and track quests.",
         L"Sign In", L"Token", L"Email or phone number", L"Password",
@@ -152,6 +159,7 @@ inline const LocaleStrings kLocales[] = {
         L"No Quests", L"There are currently no active completable quests for this account. Check back later!",
         L"Complete all available quests", L"Complete quest", L"Refresh list",
         L"Completed", L"Running\x2026", L"Current Task", L"Stop", L"Load more",
+        L"Watch video", L"Watch video on mobile", L"Play on desktop", L"Stream on desktop", L"Play activity",
         L"Connect Discord", L"No Discord account connected",
         L"Connect your Discord account to complete and track quests.",
         L"Sign In", L"Token", L"Email or phone number", L"Password",
@@ -183,6 +191,7 @@ inline const LocaleStrings kLocales[] = {
         L"Aucune qu\x00eate", L"Il n\x2019y a actuellement aucune qu\x00eate disponible pour ce compte.",
         L"Compl\x00e9ter toutes les qu\x00eates disponibles", L"Compl\x00e9ter la qu\x00eate", L"Actualiser la liste",
         L"Compl\x00e9t\x00e9e", L"En cours\x2026", L"T\x00e2che en cours", L"Arr\x00eater", L"Charger plus",
+        L"Regarder une vid\x00e9o", L"Regarder une vid\x00e9o sur mobile", L"Jouer sur ordinateur", L"Diffuser sur ordinateur", L"Jouer \x00e0 une activit\x00e9",
         L"Connecter Discord", L"Aucun compte Discord li\x00e9",
         L"Connectez votre compte Discord pour suivre et accomplir des qu\x00eates.",
         L"Connexion directe", L"Jeton", L"E-mail ou T\x00e9l\x00e9phone", L"Mot de passe",
@@ -214,6 +223,7 @@ inline const LocaleStrings kLocales[] = {
         L"\x30af\x30a8\x30b9\x30c8\x306f\x3042\x308a\x307e\x305b\x3093", L"\x73fe\x5728\x3053\x306e\x30a2\x30ab\x30a6\x30f3\x30c8\x3067\x9054\x6210\x53ef\x80fd\x306a\x30af\x30a8\x30b9\x30c8\x306f\x3042\x308a\x307e\x305b\x3093\x3002",
         L"\x5229\x7528\x53ef\x80fd\x306a\x3059\x3079\x3066\x306e\x30af\x30a8\x30b9\x30c8\x3092\x9054\x6210", L"\x30af\x30a8\x30b9\x30c8\x3092\x9054\x6210", L"\x4e00\x89a7\x3092\x66f4\x65b0",
         L"\x9054\x6210\x6e08\x307f", L"\x5b9f\x884c\x4e2d\x2026", L"\x9032\x884c\x4e2d\x306e\x30bf\x30b9\x30af", L"\x505c\x6b62", L"\x3055\x3089\x306b\x8aad\x307f\x8fbc\x3080",
+        L"\x52d5\x753b\x3092\x8996\x8074", L"\x30e2\x30d0\x30a4\x30eb\x3067\x52d5\x753b\x3092\x8996\x8074", L"\x30c7\x30b9\x30af\x30c8\x30c3\x30d7\x3067\x30d7\x30ec\x30a4", L"\x30c7\x30b9\x30af\x30c8\x30c3\x30d7\x3067\x914d\x4fe1", L"\x30a2\x30af\x30c6\x30a3\x30d3\x30c6\x30a3\x3092\x30d7\x30ec\x30a4",
         L"Discord\x3092\x9023\x643a", L"Discord\x30a2\x30ab\x30a6\x30f3\x30c8\x304c\x672a\x9023\x643a\x3067\x3059",
         L"\x30af\x30a8\x30b9\x30c8\x3092\x81ea\x52d5\x9054\x6210\x30fb\x7ba1\x7406\x3059\x308b\x306b\x306f\x3001" L"Discord\x30a2\x30ab\x30a6\x30f3\x30c8\x3092\x9023\x643a\x3057\x3066\x304f\x3060\x3055\x3044\x3002",
         L"\x76f4\x63a5\x30ed\x30b0\x30a4\x30f3", L"\x30c8\x30fc\x30af\x30f3", L"\x30e1\x30fc\x30eb\x30a2\x30c9\x30ec\x30b9\x307e\x305f\x306f\x96fb\x8a71\x756a\x53f7", L"\x30d1\x30b9\x30ef\x30fc\x30c9",
@@ -245,6 +255,7 @@ inline const LocaleStrings kLocales[] = {
         L"Sem miss\x00f5es", L"No momento n\x00e3o h\x00e1 miss\x00f5es ativas dispon\x00edveis para esta conta.",
         L"Completar todas as miss\x00f5es dispon\x00edveis", L"Completar miss\x00e3o", L"Atualizar lista",
         L"Conclu\x00edda", L"Em andamento\x2026", L"Tarefa atual", L"Parar", L"Carregar mais",
+        L"Assistir ao v\x00eddeo", L"Assistir ao v\x00eddeo no celular", L"Jogar no computador", L"Transmitir no computador", L"Jogar atividade",
         L"Conectar Discord", L"Nenhuma conta do Discord vinculada",
         L"Conecte sua conta do Discord para concluir e acompanhar miss\x00f5es.",
         L"Login Direto", L"Token", L"E-mail ou Telefone", L"Senha",
@@ -276,6 +287,7 @@ inline const LocaleStrings kLocales[] = {
         L"Sem miss\x00f5es", L"De momento n\x00e3o existem miss\x00f5es ativas para esta conta.",
         L"Concluir todas as miss\x00f5es dispon\x00edveis", L"Concluir miss\x00e3o", L"Atualizar lista",
         L"Conclu\x00edda", L"Em curso\x2026", L"Tarefa atual", L"Parar", L"Carregar mais",
+        L"Ver v\x00eddeo", L"Ver v\x00eddeo no telem\x00f3vel", L"Jogar no computador", L"Transmitir no computador", L"Jogar atividade",
         L"Ligar Discord", L"Nenhuma conta do Discord associada",
         L"Associe a sua conta do Discord para concluir e acompanhar miss\x00f5es.",
         L"Sess\x00e3o Direta", L"Token", L"E-mail ou Telem\x00f3vel", L"Palavra-passe",
@@ -307,4 +319,16 @@ inline const LocaleStrings& GetLocale(LocaleId id) {
     int idx = static_cast<int>(id);
     if (idx < 0 || idx > 5) idx = 0;
     return kLocales[idx];
+}
+
+inline const wchar_t* FormatQuestType(const std::string& taskType, LocaleId loc) {
+    const auto& s = GetLocale(loc);
+    if (taskType == "WATCH_VIDEO") return s.questTypeWatchVideo;
+    if (taskType == "WATCH_VIDEO_ON_MOBILE") return s.questTypeWatchVideoOnMobile;
+    if (taskType == "PLAY_ON_DESKTOP") return s.questTypePlayOnDesktop;
+    if (taskType == "STREAM_ON_DESKTOP") return s.questTypeStreamOnDesktop;
+    if (taskType == "PLAY_ACTIVITY") return s.questTypePlayActivity;
+    static thread_local wchar_t fallback[128];
+    MultiByteToWideChar(CP_UTF8, 0, taskType.c_str(), -1, fallback, 128);
+    return fallback;
 }

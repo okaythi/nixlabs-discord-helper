@@ -1,4 +1,5 @@
 #include "ui_renderer.h"
+#include "image_cache.h"
 
 UiRenderer::UiRenderer() {}
 
@@ -58,6 +59,8 @@ bool UiRenderer::Initialize(HWND hwnd) {
     m_dwrite->CreateTextFormat(L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 11.5f, L"en-us", &m_fmtSmall);
     m_dwrite->CreateTextFormat(L"Cascadia Mono", nullptr, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"en-us", &m_fmtMono);
 
+    ImageCache::Instance().Initialize(hwnd);
+
     return EnsureTarget();
 }
 
@@ -87,6 +90,7 @@ void UiRenderer::SetDpi(UINT dpi) {
 }
 
 void UiRenderer::DiscardResources() {
+    ImageCache::Instance().DiscardGpuResources();
     if (m_brush) { m_brush->Release(); m_brush = nullptr; }
     if (m_rt) { m_rt->Release(); m_rt = nullptr; }
 }
@@ -172,6 +176,102 @@ void UiRenderer::DrawLogoutIcon(float cx, float cy, UINT32 rgb, float alpha) {
     m_rt->DrawLine(pt(9.0f, 12.0f), pt(20.5f, 12.0f), m_brush, strokeW, m_roundStroke);
     m_rt->DrawLine(pt(16.0f, 7.5f), pt(20.5f, 12.0f), m_brush, strokeW, m_roundStroke);
     m_rt->DrawLine(pt(20.5f, 12.0f), pt(16.0f, 16.5f), m_brush, strokeW, m_roundStroke);
+}
+
+void UiRenderer::DrawIconUser(float cx, float cy, float size, UINT32 rgb, float alpha) {
+    if (!m_rt || !m_brush) return;
+    SetColor(rgb, alpha);
+    const float s = size / 24.0f;
+    const float strokeW = 1.75f;
+    auto pt = [&](float ux, float uy) {
+        return D2D1::Point2F(cx + (ux - 12.0f) * s, cy + (uy - 12.0f) * s);
+    };
+    D2D1_ELLIPSE head = D2D1::Ellipse(pt(12.0f, 7.0f), 4.0f * s, 4.0f * s);
+    m_rt->DrawEllipse(head, m_brush, strokeW, m_roundStroke);
+
+    ID2D1PathGeometry* geo = nullptr;
+    if (SUCCEEDED(m_factory->CreatePathGeometry(&geo))) {
+        ID2D1GeometrySink* sink = nullptr;
+        if (SUCCEEDED(geo->Open(&sink))) {
+            sink->BeginFigure(pt(19.0f, 21.0f), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(pt(19.0f, 19.0f));
+            sink->AddArc(D2D1::ArcSegment(pt(15.0f, 15.0f), D2D1::SizeF(4.0f * s, 4.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->AddLine(pt(9.0f, 15.0f));
+            sink->AddArc(D2D1::ArcSegment(pt(5.0f, 19.0f), D2D1::SizeF(4.0f * s, 4.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->AddLine(pt(5.0f, 21.0f));
+            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+            sink->Close();
+            sink->Release();
+            m_rt->DrawGeometry(geo, m_brush, strokeW, m_roundStroke);
+        }
+        geo->Release();
+    }
+}
+
+void UiRenderer::DrawIconSparkles(float cx, float cy, float size, UINT32 rgb, float alpha) {
+    if (!m_rt || !m_brush) return;
+    SetColor(rgb, alpha);
+    const float s = size / 24.0f;
+    const float strokeW = 1.75f;
+    auto pt = [&](float ux, float uy) {
+        return D2D1::Point2F(cx + (ux - 12.0f) * s, cy + (uy - 12.0f) * s);
+    };
+
+    ID2D1PathGeometry* geo = nullptr;
+    if (SUCCEEDED(m_factory->CreatePathGeometry(&geo))) {
+        ID2D1GeometrySink* sink = nullptr;
+        if (SUCCEEDED(geo->Open(&sink))) {
+            sink->BeginFigure(pt(12.0f, 3.0f), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(pt(10.1f, 8.8f));
+            sink->AddArc(D2D1::ArcSegment(pt(8.8f, 10.1f), D2D1::SizeF(2.0f * s, 2.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->AddLine(pt(3.0f, 12.0f));
+            sink->AddLine(pt(8.8f, 13.9f));
+            sink->AddArc(D2D1::ArcSegment(pt(10.1f, 15.2f), D2D1::SizeF(2.0f * s, 2.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->AddLine(pt(12.0f, 21.0f));
+            sink->AddLine(pt(13.9f, 15.2f));
+            sink->AddArc(D2D1::ArcSegment(pt(15.2f, 13.9f), D2D1::SizeF(2.0f * s, 2.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->AddLine(pt(21.0f, 12.0f));
+            sink->AddLine(pt(15.2f, 10.1f));
+            sink->AddArc(D2D1::ArcSegment(pt(13.9f, 8.8f), D2D1::SizeF(2.0f * s, 2.0f * s), 0.0f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+            m_rt->DrawGeometry(geo, m_brush, strokeW, m_roundStroke);
+        }
+        geo->Release();
+    }
+}
+
+void UiRenderer::DrawIconSnowflake(float cx, float cy, float size, UINT32 rgb, float alpha) {
+    if (!m_rt || !m_brush) return;
+    SetColor(rgb, alpha);
+    const float s = size / 24.0f;
+    const float strokeW = 1.75f;
+    auto pt = [&](float ux, float uy) {
+        return D2D1::Point2F(cx + (ux - 12.0f) * s, cy + (uy - 12.0f) * s);
+    };
+
+    m_rt->DrawLine(pt(12.0f, 2.0f), pt(12.0f, 22.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(3.34f, 7.0f), pt(20.66f, 17.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(3.34f, 17.0f), pt(20.66f, 7.0f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(9.0f, 5.0f), pt(12.0f, 2.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(12.0f, 2.0f), pt(15.0f, 5.0f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(9.0f, 19.0f), pt(12.0f, 22.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(12.0f, 22.0f), pt(15.0f, 19.0f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(5.94f, 5.5f), pt(3.34f, 7.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(3.34f, 7.0f), pt(3.44f, 10.0f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(18.06f, 18.5f), pt(20.66f, 17.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(20.66f, 17.0f), pt(20.56f, 14.0f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(3.44f, 14.0f), pt(3.34f, 17.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(3.34f, 17.0f), pt(5.94f, 18.5f), m_brush, strokeW, m_roundStroke);
+
+    m_rt->DrawLine(pt(20.56f, 10.0f), pt(20.66f, 7.0f), m_brush, strokeW, m_roundStroke);
+    m_rt->DrawLine(pt(20.66f, 7.0f), pt(18.06f, 5.5f), m_brush, strokeW, m_roundStroke);
 }
 
 void UiRenderer::RegisterHit(AppState& state, int id, float x, float y, float w, float h) {

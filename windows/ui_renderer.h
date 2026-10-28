@@ -76,6 +76,9 @@ private:
     void DrawTextStr(const std::wstring& text, IDWriteTextFormat* fmt, float x, float y, float w, float h, UINT32 rgb, float alpha = 1.0f);
     void DrawThemeIcon(float cx, float cy, bool isDark, UINT32 rgb, float alpha = 1.0f);
     void DrawLogoutIcon(float cx, float cy, UINT32 rgb, float alpha = 1.0f);
+    void DrawIconUser(float cx, float cy, float size, UINT32 rgb, float alpha = 1.0f);
+    void DrawIconSparkles(float cx, float cy, float size, UINT32 rgb, float alpha = 1.0f);
+    void DrawIconSnowflake(float cx, float cy, float size, UINT32 rgb, float alpha = 1.0f);
     void RegisterHit(AppState& state, int id, float x, float y, float w, float h);
 
     void RenderLoginScreen(AppState& state, float W, float H);

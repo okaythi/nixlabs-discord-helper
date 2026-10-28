@@ -12,6 +12,7 @@
 #include "api_client.h"
 #include "ui_renderer.h"
 #include "shell_integration.h"
+#include "image_cache.h"
 
 #define WM_APP_STATE_UPDATED (WM_USER + 101)
 #define TIMER_BENCH_STEP     1
@@ -555,6 +556,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     ShellIntegration::InitializeProcessIdentity();
 
     if (lpCmdLine) {
@@ -653,5 +655,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
 
     if (hClassIconSm) DestroyIcon(hClassIconSm);
     if (hClassIconLg) DestroyIcon(hClassIconLg);
+    ImageCache::Instance().Shutdown();
+    CoUninitialize();
     return 0;
 }

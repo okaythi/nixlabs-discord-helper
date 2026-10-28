@@ -151,6 +151,9 @@ static void ApplyUserJsonToStateLocked(AppState& state, const std::string& json)
         // Automatically resolve UI language from the Nixlabs account language (matching Linux behavior)
         state.locale = ResolveLocaleFromCode(state.user.language);
     }
+    std::string avatar = ExtractJsonString(json, "avatar");
+    if (avatar.empty()) avatar = ExtractJsonString(json, "avatar_url");
+    if (!avatar.empty()) state.user.avatarUrl = Utf8ToWide(avatar);
     state.account.accountStanding = ExtractJsonInt(json, "account_standing", 0);
     state.account.banned = ExtractJsonBool(json, "banned", false);
 }
@@ -187,6 +190,8 @@ void LoadStateFromDisk(AppState& state) {
             state.discordUser.globalName = Utf8ToWide(ExtractJsonString(stateData, "discord_global_name"));
             state.discordUser.bannerColor = Utf8ToWide(ExtractJsonString(stateData, "discord_banner_color"));
             state.discordUser.createdAt = Utf8ToWide(ExtractJsonString(stateData, "discord_created_at"));
+            state.discordUser.avatarUrl = Utf8ToWide(ExtractJsonString(stateData, "discord_avatar_url"));
+            state.discordUser.bannerUrl = Utf8ToWide(ExtractJsonString(stateData, "discord_banner_url"));
         }
     }
     if ((state.sessionCookie.empty() || state.sessionCookie == "bench-session") && !authData.empty()) {
@@ -233,11 +238,14 @@ void FlushStateIfDirty(AppState& state) {
         << "\",\"email\":\"" << WideToUtf8(state.user.email)
         << "\",\"role\":\"" << WideToUtf8(state.user.role)
         << "\",\"language\":\"" << WideToUtf8(state.user.language)
+        << "\",\"avatar_url\":\"" << WideToUtf8(state.user.avatarUrl)
         << "\"},\"discord_id\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.id) : "")
         << "\",\"discord_username\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.username) : "")
         << "\",\"discord_global_name\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.globalName) : "")
         << "\",\"discord_banner_color\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.bannerColor) : "")
         << "\",\"discord_created_at\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.createdAt) : "")
+        << "\",\"discord_avatar_url\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.avatarUrl) : "")
+        << "\",\"discord_banner_url\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.bannerUrl) : "")
         << "\",\"quests\":[";
     for (size_t i = 0; i < state.quests.size(); i++) {
         const auto& q = state.quests[i];

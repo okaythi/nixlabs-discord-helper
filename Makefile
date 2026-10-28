@@ -76,10 +76,10 @@ windows: frontend
 	x86_64-w64-mingw32-windres windows/resource.rc -O coff -o windows/resource.o
 	@echo "==> Building native Windows 11 Direct2D app..."
 	x86_64-w64-mingw32-g++-posix -O2 -s -std=c++17 -fno-rtti -ffunction-sections -fdata-sections -municode \
-		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp windows/shell_integration.cpp windows/resource.o \
+		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp windows/shell_integration.cpp windows/image_cache.cpp windows/resource.o \
 		-o nixlabs-discord-helper.exe \
 		-Wl,--gc-sections -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -lpropsys -mwindows
+		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -lpropsys -lwindowscodecs -mwindows
 
 install: deb
 	@echo "==> Installing $(DEB_NAME)..."

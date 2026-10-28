@@ -210,6 +210,11 @@ void FetchDiscordUserProfile(AppState& state, bool forceRefresh) {
                 std::string globalName = ExtractJsonString(profResp, "global_name");
                 std::string bannerColor = ExtractJsonString(profResp, "banner_color");
                 std::string createdAt = ExtractJsonString(profResp, "created_at");
+                std::string avatar = ExtractJsonString(profResp, "avatar");
+                std::string avatarUrl = ExtractJsonString(profResp, "avatar_url");
+                std::string banner = ExtractJsonString(profResp, "banner");
+                std::string bannerUrl = ExtractJsonString(profResp, "banner_url");
+
                 if (!id.empty() || !username.empty()) {
                     state.discordUser.connected = true;
                     state.discordUser.id = Utf8ToWide(id);
@@ -217,6 +222,16 @@ void FetchDiscordUserProfile(AppState& state, bool forceRefresh) {
                     state.discordUser.globalName = globalName.empty() ? state.discordUser.username : Utf8ToWide(globalName);
                     state.discordUser.bannerColor = Utf8ToWide(bannerColor);
                     state.discordUser.createdAt = FormatDiscordCreationDate(createdAt, id);
+                    if (!avatarUrl.empty()) {
+                        state.discordUser.avatarUrl = Utf8ToWide(avatarUrl);
+                    } else if (!avatar.empty() && !id.empty()) {
+                        state.discordUser.avatarUrl = L"https://cdn.discordapp.com/avatars/" + state.discordUser.id + L"/" + Utf8ToWide(avatar) + L".png?size=128";
+                    }
+                    if (!bannerUrl.empty()) {
+                        state.discordUser.bannerUrl = Utf8ToWide(bannerUrl);
+                    } else if (!banner.empty() && !id.empty()) {
+                        state.discordUser.bannerUrl = L"https://cdn.discordapp.com/banners/" + state.discordUser.id + L"/" + Utf8ToWide(banner) + L".png?size=600";
+                    }
                     state.discordError.clear();
                     SaveAuthToDisk(state);
                 }
@@ -306,6 +321,10 @@ void SubmitDiscordToken(AppState& state) {
                 std::string username = ExtractJsonString(meResp, "username");
                 std::string globalName = ExtractJsonString(meResp, "global_name");
                 std::string bannerColor = ExtractJsonString(meResp, "banner_color");
+                std::string avatar = ExtractJsonString(meResp, "avatar");
+                std::string avatarUrl = ExtractJsonString(meResp, "avatar_url");
+                std::string banner = ExtractJsonString(meResp, "banner");
+                std::string bannerUrl = ExtractJsonString(meResp, "banner_url");
                 state.discordToken = token;
                 state.discordUser.connected = true;
                 state.discordUser.id = Utf8ToWide(id);
@@ -313,6 +332,16 @@ void SubmitDiscordToken(AppState& state) {
                 state.discordUser.globalName = globalName.empty() ? state.discordUser.username : Utf8ToWide(globalName);
                 state.discordUser.bannerColor = Utf8ToWide(bannerColor);
                 state.discordUser.createdAt = FormatDiscordCreationDate("", id);
+                if (!avatarUrl.empty()) {
+                    state.discordUser.avatarUrl = Utf8ToWide(avatarUrl);
+                } else if (!avatar.empty() && !id.empty()) {
+                    state.discordUser.avatarUrl = L"https://cdn.discordapp.com/avatars/" + state.discordUser.id + L"/" + Utf8ToWide(avatar) + L".png?size=128";
+                }
+                if (!bannerUrl.empty()) {
+                    state.discordUser.bannerUrl = Utf8ToWide(bannerUrl);
+                } else if (!banner.empty() && !id.empty()) {
+                    state.discordUser.bannerUrl = L"https://cdn.discordapp.com/banners/" + state.discordUser.id + L"/" + Utf8ToWide(banner) + L".png?size=600";
+                }
                 state.isModalOpen = false;
                 state.modalToken.clear();
                 SaveAuthToDisk(state);
@@ -332,12 +361,83 @@ void SubmitDiscordToken(AppState& state) {
 }
 
 void FetchQuestsList(AppState& state, bool forceRefresh) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    if (forceRefresh || state.quests.empty()) {
-        PopulateSampleQuestsIfOffline(state);
-        SaveQuestsCacheToDisk(state);
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        cookie = state.sessionCookie;
     }
-    SortQuestsMostRecentFirst(state.quests);
+    std::thread([&state, cookie, forceRefresh]() {
+        bool loadedFromApi = false;
+        if (!cookie.empty() && cookie != "bench-session") {
+            std::wstring headers = L"Authorization: Bearer " + Utf8ToWide(cookie) +
+                                   L"\r\nCookie: _nixlabs_session=" + Utf8ToWide(cookie) +
+                                   L"\r\nAccept: application/json\r\n";
+            const wchar_t* path = forceRefresh ? L"/api/quests?refresh=true" : L"/api/quests";
+            int status = 0;
+            std::string resp = HttpRequestSync(L"api-helper.nixlabs.tech", path, L"GET", "", headers, &status);
+            if (status == 200 && !resp.empty()) {
+                std::vector<QuestItem> newQuests;
+                size_t qPos = resp.find("\"quests\":[");
+                if (qPos == std::string::npos) qPos = resp.find("\"quests\": [");
+                if (qPos != std::string::npos) {
+                    size_t start = resp.find('[', qPos);
+                    size_t cur = start + 1;
+                    while (cur < resp.size() && resp[cur] != ']') {
+                        size_t objStart = resp.find('{', cur);
+                        if (objStart == std::string::npos) break;
+                        size_t objEnd = resp.find('}', objStart);
+                        if (objEnd == std::string::npos) break;
+                        std::string qObj = resp.substr(objStart, objEnd - objStart + 1);
+                        QuestItem q;
+                        q.id = ExtractJsonString(qObj, "id");
+                        if (!q.id.empty()) {
+                            q.idW = Utf8ToWide(q.id);
+                            q.name = Utf8ToWide(ExtractJsonString(qObj, "name"));
+                            q.gameTitle = Utf8ToWide(ExtractJsonString(qObj, "game_title"));
+                            q.gamePublisher = Utf8ToWide(ExtractJsonString(qObj, "game_publisher"));
+                            q.taskType = ExtractJsonString(qObj, "task_type");
+                            q.taskTypeW = Utf8ToWide(q.taskType);
+                            q.secondsNeeded = ExtractJsonInt(qObj, "seconds_needed", 900);
+                            q.secondsDone = ExtractJsonInt(qObj, "seconds_done", 0);
+                            q.enrolled = ExtractJsonBool(qObj, "enrolled", false);
+                            q.completed = ExtractJsonBool(qObj, "completed", false);
+                            q.completable = ExtractJsonBool(qObj, "completable", true);
+                            q.startsAt = ExtractJsonString(qObj, "starts_at");
+                            q.expiresAt = ExtractJsonString(qObj, "expires_at");
+                            q.orbQuantity = ExtractJsonInt(qObj, "orb_quantity", 0);
+                            std::string hero = ExtractJsonString(qObj, "hero_url");
+                            if (hero.empty()) hero = ExtractJsonString(qObj, "hero");
+                            if (!hero.empty()) q.heroUrl = Utf8ToWide(hero);
+                            std::string prim = ExtractJsonString(qObj, "primary");
+                            if (!prim.empty()) {
+                                if (prim[0] == '#') prim = prim.substr(1);
+                                q.primaryColor = std::strtoul(prim.c_str(), nullptr, 16);
+                            }
+                            ComputeQuestRecency(q, q.sortTimestampMs, q.sortSnowflake);
+                            newQuests.push_back(std::move(q));
+                        }
+                        cur = objEnd + 1;
+                    }
+                }
+                if (!newQuests.empty()) {
+                    std::lock_guard<std::mutex> lk(state.mu);
+                    state.quests = std::move(newQuests);
+                    SortQuestsMostRecentFirst(state.quests);
+                    SaveQuestsCacheToDisk(state);
+                    loadedFromApi = true;
+                }
+            }
+        }
+        if (!loadedFromApi) {
+            std::lock_guard<std::mutex> lk(state.mu);
+            if (forceRefresh || state.quests.empty()) {
+                PopulateSampleQuestsIfOffline(state);
+                SaveQuestsCacheToDisk(state);
+            }
+            SortQuestsMostRecentFirst(state.quests);
+        }
+        if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+    }).detach();
 }
 
 void StartSingleQuest(AppState& state, const std::string& questId) {
