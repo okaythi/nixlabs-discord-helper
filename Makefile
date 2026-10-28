@@ -76,7 +76,7 @@ windows: frontend
 		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp \
 		-o nixlabs-discord-helper.exe \
 		-static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdiplus -lshell32 -lole32 -luuid -mwindows
+		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -mwindows
 
 install: deb
 	@echo "==> Installing $(DEB_NAME)..."
