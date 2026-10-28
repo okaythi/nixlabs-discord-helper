@@ -102,7 +102,7 @@ static void WatchBackendProgress(HWND hwnd, int port) {
             HINTERNET hConnect = WinHttpConnect(hSession, L"127.0.0.1", static_cast<INTERNET_PORT>(port), 0);
             if (hConnect) {
                 HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", L"/api/quests/progress",
-                                                       nullptr, WINHTTP_NO_REFERRER,
+                                                       nullptr, WINHTTP_NO_REFERER,
                                                        WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
                 if (hRequest) {
                     if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
