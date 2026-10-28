@@ -381,7 +381,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int /*nCmd
         })();
     )raw");
 
-    w.bind("openExternal_native", [](const std::string& /*seq*/, const std::string& req, void* /*arg*/) {
+    w.bind("openExternal_native", [](std::string req) -> std::string {
         std::string url;
         size_t first = req.find('"');
         if (first != std::string::npos) {
@@ -394,6 +394,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int /*nCmd
             std::wstring wurl(url.begin(), url.end());
             ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         }
+        return "{}";
     });
 
     std::thread watcher([hwnd, port]() {
