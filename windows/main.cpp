@@ -328,88 +328,91 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int /*nCmd
         return 1;
     }
 
-    webview::webview w(false, nullptr);
-    g_pWebview = &w;
+    {
+        webview::webview w(false, nullptr);
+        g_pWebview = &w;
 
-    HWND hwnd = static_cast<HWND>(w.window());
-    if (!hwnd) {
-        if (g_backendJob) CloseHandle(g_backendJob);
-        return 1;
-    }
+        HWND hwnd = static_cast<HWND>(w.window());
+        if (!hwnd) {
+            if (g_backendJob) CloseHandle(g_backendJob);
+            return 1;
+        }
 
-    g_state.hwnd = hwnd;
-    UINT dpi = GetDpiForWindow(hwnd);
-    if (dpi == 0) dpi = 96;
-    g_state.dpiScale = static_cast<float>(dpi) / 96.0f;
+        g_state.hwnd = hwnd;
+        UINT dpi = GetDpiForWindow(hwnd);
+        if (dpi == 0) dpi = 96;
+        g_state.dpiScale = static_cast<float>(dpi) / 96.0f;
 
-    ShellIntegration::ApplyWindows11FrameAttributes(hwnd, true);
-    ShellIntegration::UpdateWindowIconsForDpi(hwnd, hInstance, dpi);
-    ShellIntegration::InitializeTrayIcon(hwnd, hInstance);
-    ShellIntegration::InitializeTaskbarList(hwnd);
-    ShellIntegration::RegisterStartMenuAndInstalledApp(nullptr, false);
+        ShellIntegration::ApplyWindows11FrameAttributes(hwnd, true);
+        ShellIntegration::UpdateWindowIconsForDpi(hwnd, hInstance, dpi);
+        ShellIntegration::InitializeTrayIcon(hwnd, hInstance);
+        ShellIntegration::InitializeTaskbarList(hwnd);
+        ShellIntegration::RegisterStartMenuAndInstalledApp(nullptr, false);
 
-    SetWindowSubclass(hwnd, WebviewWindowSubclass, 1, 0);
+        SetWindowSubclass(hwnd, WebviewWindowSubclass, 1, 0);
 
-    w.set_title("Discord Helper");
-    w.set_size(1040, 720, WEBVIEW_HINT_NONE);
+        w.set_title("Discord Helper");
+        w.set_size(1040, 720, WEBVIEW_HINT_NONE);
 
-    w.init(R"raw(
-        (function() {
-            function handleExternal(url) {
-                if (url && (url.startsWith('http://') || url.startsWith('https://')) && !url.startsWith(location.origin)) {
-                    if (window.openExternal_native) {
-                        window.openExternal_native(url);
-                        return true;
+        w.init(R"raw(
+            (function() {
+                function handleExternal(url) {
+                    if (url && (url.startsWith('http://') || url.startsWith('https://')) && !url.startsWith(location.origin)) {
+                        if (window.openExternal_native) {
+                            window.openExternal_native(url);
+                            return true;
+                        }
                     }
+                    return false;
                 }
-                return false;
+                document.addEventListener('click', function(e) {
+                    var a = e.target.closest('a');
+                    if (a && a.href && handleExternal(a.href)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                }, true);
+                var origOpen = window.open;
+                window.open = function(url) {
+                    if (handleExternal(url)) {
+                        return null;
+                    }
+                    return origOpen.apply(this, arguments);
+                };
+            })();
+        )raw");
+
+        w.bind("openExternal_native", [](std::string req) -> std::string {
+            std::string url;
+            size_t first = req.find('"');
+            if (first != std::string::npos) {
+                size_t second = req.find('"', first + 1);
+                if (second != std::string::npos) {
+                    url = req.substr(first + 1, second - first - 1);
+                }
             }
-            document.addEventListener('click', function(e) {
-                var a = e.target.closest('a');
-                if (a && a.href && handleExternal(a.href)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }, true);
-            var origOpen = window.open;
-            window.open = function(url) {
-                if (handleExternal(url)) {
-                    return null;
-                }
-                return origOpen.apply(this, arguments);
-            };
-        })();
-    )raw");
-
-    w.bind("openExternal_native", [](std::string req) -> std::string {
-        std::string url;
-        size_t first = req.find('"');
-        if (first != std::string::npos) {
-            size_t second = req.find('"', first + 1);
-            if (second != std::string::npos) {
-                url = req.substr(first + 1, second - first - 1);
+            if (!url.empty()) {
+                std::wstring wurl(url.begin(), url.end());
+                ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             }
-        }
-        if (!url.empty()) {
-            std::wstring wurl(url.begin(), url.end());
-            ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-        }
-        return "{}";
-    });
+            return "{}";
+        });
 
-    std::thread watcher([hwnd, port]() {
-        WatchBackendProgress(hwnd, port);
-    });
-    watcher.detach();
+        std::thread watcher([hwnd, port]() {
+            WatchBackendProgress(hwnd, port);
+        });
+        watcher.detach();
 
-    std::string appUrl = "http://127.0.0.1:" + std::to_string(port);
-    w.navigate(appUrl);
+        std::string appUrl = "http://127.0.0.1:" + std::to_string(port);
+        w.navigate(appUrl);
 
-    w.run();
+        w.run();
 
-    g_running.store(false);
-    ShellIntegration::RemoveTrayIcon(hwnd);
-    ShellIntegration::ReleaseTaskbarList();
+        g_running.store(false);
+        ShellIntegration::RemoveTrayIcon(hwnd);
+        ShellIntegration::ReleaseTaskbarList();
+        g_pWebview = nullptr;
+    }
 
     if (g_backendPi.hProcess) {
         TerminateProcess(g_backendPi.hProcess, 0);
@@ -420,6 +423,5 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int /*nCmd
         CloseHandle(g_backendJob);
     }
 
-    CoUninitialize();
     return 0;
 }
