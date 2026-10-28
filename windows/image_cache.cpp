@@ -8,15 +8,6 @@
 
 #define WM_APP_STATE_UPDATED (WM_USER + 101)
 
-#ifndef GUID_WICPixelFormat32bppPBGRA
-static const GUID GUID_WICPixelFormat32bppPBGRA =
-    { 0x6fddc324, 0x4e03, 0x4bfe, { 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x10 } };
-#endif
-#ifndef CLSID_WICImagingFactory
-static const CLSID CLSID_WICImagingFactory =
-    { 0xcacaf262, 0xb42d, 0x498e, { 0x82, 0x42, 0x98, 0x6a, 0x89, 0x51, 0x5a, 0x36 } };
-#endif
-
 ImageCache& ImageCache::Instance() {
     static ImageCache s_instance;
     return s_instance;

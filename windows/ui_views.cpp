@@ -126,9 +126,9 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
     UINT32 iconInk = 0x243342;
     struct TabDef { NavTab tab; int hit; const wchar_t* label; UINT32 dotColor; };
     TabDef tabs[] = {
-        {NavTab::Account, HIT_TAB_ACCOUNT, L.tabAccount, state.darkMode ? 0xA8C7FA : 0xC2D8FB},
-        {NavTab::Quests, HIT_TAB_QUESTS, L.tabQuests, state.darkMode ? 0xCBB7F2 : 0xE0D1FA},
-        {NavTab::Snowflakes, HIT_TAB_SNOWFLAKES, L.tabSnowflakes, state.darkMode ? 0x91D4F6 : 0xB8E7FB}
+        {NavTab::Account, HIT_TAB_ACCOUNT, L.tabAccount, state.darkMode ? 0xA8C7FAu : 0xC2D8FBu},
+        {NavTab::Quests, HIT_TAB_QUESTS, L.tabQuests, state.darkMode ? 0xCBB7F2u : 0xE0D1FAu},
+        {NavTab::Snowflakes, HIT_TAB_SNOWFLAKES, L.tabSnowflakes, state.darkMode ? 0x91D4F6u : 0xB8E7FBu}
     };
 
     if (W > 700.0f) {
