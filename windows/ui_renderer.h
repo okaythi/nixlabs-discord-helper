@@ -66,12 +66,16 @@ private:
     IDWriteTextFormat* m_fmtBodyBold = nullptr;
     IDWriteTextFormat* m_fmtSmall = nullptr;
     IDWriteTextFormat* m_fmtMono = nullptr;
+    ID2D1StrokeStyle* m_roundStroke = nullptr;
+    ID2D1PathGeometry* m_moonGeo = nullptr;
 
     bool EnsureTarget();
     void SetColor(UINT32 rgb, float alpha = 1.0f);
     void FillRoundRect(float x, float y, float w, float h, float r, UINT32 rgb, float alpha = 1.0f);
     void DrawRoundRect(float x, float y, float w, float h, float r, UINT32 rgb, float stroke = 1.0f, float alpha = 1.0f);
     void DrawTextStr(const std::wstring& text, IDWriteTextFormat* fmt, float x, float y, float w, float h, UINT32 rgb, float alpha = 1.0f);
+    void DrawThemeIcon(float cx, float cy, bool isDark, UINT32 rgb, float alpha = 1.0f);
+    void DrawLogoutIcon(float cx, float cy, UINT32 rgb, float alpha = 1.0f);
     void RegisterHit(AppState& state, int id, float x, float y, float w, float h);
 
     void RenderLoginScreen(AppState& state, float W, float H);

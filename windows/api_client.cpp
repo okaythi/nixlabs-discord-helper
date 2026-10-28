@@ -104,7 +104,7 @@ const std::wstring& GetConfigDirPath() {
     return s_dir;
 }
 
-// Pass 2 Optimization: Single sequential read using FILE_FLAG_SEQUENTIAL_SCAN and GetFileSizeEx (1 ReadFile syscall instead of 512-byte loop)
+// Pass 2 Optimization: Single sequential read using FILE_FLAG_SEQUENTIAL_SCAN and GetFileSizeEx
 std::string ReadSequentialFile(const std::wstring& path) {
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
@@ -122,7 +122,7 @@ std::string ReadSequentialFile(const std::wstring& path) {
     return content;
 }
 
-// Pass 2 Optimization: Single buffered sequential write without blocking UI thread on FlushFileBuffers barriers
+// Pass 2 Optimization: Single buffered sequential write without blocking UI thread
 void WriteSequentialFile(const std::wstring& path, const std::string& data) {
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
@@ -132,8 +132,39 @@ void WriteSequentialFile(const std::wstring& path, const std::string& data) {
     CloseHandle(hFile);
 }
 
+static void ApplyUserJsonToStateLocked(AppState& state, const std::string& json) {
+    std::string name = ExtractJsonString(json, "name");
+    std::string handle = ExtractJsonString(json, "handle");
+    if (handle.empty()) handle = ExtractJsonString(json, "username");
+    std::string email = ExtractJsonString(json, "email");
+    std::string role = ExtractJsonString(json, "role");
+    if (role.empty()) role = ExtractJsonString(json, "tier");
+    std::string lang = ExtractJsonString(json, "language");
+    if (lang.empty()) lang = ExtractJsonString(json, "locale");
+
+    if (!name.empty()) state.user.name = Utf8ToWide(name);
+    if (!handle.empty()) state.user.handle = Utf8ToWide(handle);
+    if (!email.empty()) state.user.email = Utf8ToWide(email);
+    if (!role.empty()) state.user.role = Utf8ToWide(role);
+    if (!lang.empty()) {
+        state.user.language = Utf8ToWide(lang);
+        // Automatically resolve UI language from the Nixlabs account language (matching Linux behavior)
+        state.locale = ResolveLocaleFromCode(state.user.language);
+    }
+    state.account.accountStanding = ExtractJsonInt(json, "account_standing", 0);
+    state.account.banned = ExtractJsonBool(json, "banned", false);
+}
+
 void LoadStateFromDisk(AppState& state) {
     std::string stateData = ReadSequentialFile(GetConfigDirPath() + L"\\state.json");
+    // Also read auth.json if present (shared with backend/internal/auth/auth.go)
+    std::string authData = ReadSequentialFile(GetConfigDirPath() + L"\\auth.json");
+    if (authData.empty()) {
+        wchar_t userProfile[MAX_PATH] = {0};
+        if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) > 0) {
+            authData = ReadSequentialFile(std::wstring(userProfile) + L"\\.config\\nixlabs-discord-helper\\auth.json");
+        }
+    }
     std::lock_guard<std::mutex> lk(state.mu);
     if (!stateData.empty()) {
         state.userOverrodeTheme = ExtractJsonBool(stateData, "user_theme_override", false);
@@ -142,20 +173,40 @@ void LoadStateFromDisk(AppState& state) {
             state.darkMode = (th != "light");
         }
 
-        std::string loc = ExtractJsonString(stateData, "locale");
-        if (!loc.empty()) state.locale = ResolveLocaleFromCode(Utf8ToWide(loc));
-
         state.sessionCookie = ExtractJsonString(stateData, "session_cookie");
         state.authUpdatedAt = ExtractJsonString(stateData, "updated_at");
-        state.user.name = Utf8ToWide(ExtractJsonString(stateData, "name"));
-        state.user.handle = Utf8ToWide(ExtractJsonString(stateData, "handle"));
-        state.user.email = Utf8ToWide(ExtractJsonString(stateData, "email"));
-        state.user.role = Utf8ToWide(ExtractJsonString(stateData, "role"));
-        state.user.language = Utf8ToWide(ExtractJsonString(stateData, "language"));
-        if (!state.sessionCookie.empty() && !state.user.handle.empty()) {
-            state.isAuthenticated = true;
-            state.isLoadingAuth = false;
+        ApplyUserJsonToStateLocked(state, stateData);
+
+        // Restore cached Discord profile if saved
+        std::string dId = ExtractJsonString(stateData, "discord_id");
+        std::string dUser = ExtractJsonString(stateData, "discord_username");
+        if (!dId.empty() && !dUser.empty()) {
+            state.discordUser.connected = true;
+            state.discordUser.id = Utf8ToWide(dId);
+            state.discordUser.username = Utf8ToWide(dUser);
+            state.discordUser.globalName = Utf8ToWide(ExtractJsonString(stateData, "discord_global_name"));
+            state.discordUser.bannerColor = Utf8ToWide(ExtractJsonString(stateData, "discord_banner_color"));
+            state.discordUser.createdAt = Utf8ToWide(ExtractJsonString(stateData, "discord_created_at"));
         }
+    }
+    if ((state.sessionCookie.empty() || state.sessionCookie == "bench-session") && !authData.empty()) {
+        std::string authCookie = ExtractJsonString(authData, "session_cookie");
+        if (!authCookie.empty() && authCookie != "bench-session") {
+            state.sessionCookie = authCookie;
+            state.authUpdatedAt = ExtractJsonString(authData, "updated_at");
+            ApplyUserJsonToStateLocked(state, authData);
+        } else if (state.user.handle.empty()) {
+            ApplyUserJsonToStateLocked(state, authData);
+        }
+    }
+    if (!state.sessionCookie.empty() && state.sessionCookie != "bench-session" && !state.user.handle.empty()) {
+        state.isAuthenticated = true;
+        state.isLoadingAuth = false;
+    } else if (state.sessionCookie == "bench-session") {
+        // Clear synthetic benchmark session so real interactive runs authenticate with a real Nixlabs session cookie
+        state.sessionCookie.clear();
+        state.isAuthenticated = false;
+        state.isLoadingAuth = false;
     }
     if (state.quests.empty()) {
         PopulateSampleQuestsIfOffline(state);
@@ -182,7 +233,12 @@ void FlushStateIfDirty(AppState& state) {
         << "\",\"email\":\"" << WideToUtf8(state.user.email)
         << "\",\"role\":\"" << WideToUtf8(state.user.role)
         << "\",\"language\":\"" << WideToUtf8(state.user.language)
-        << "\"},\"quests\":[";
+        << "\"},\"discord_id\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.id) : "")
+        << "\",\"discord_username\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.username) : "")
+        << "\",\"discord_global_name\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.globalName) : "")
+        << "\",\"discord_banner_color\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.bannerColor) : "")
+        << "\",\"discord_created_at\":\"" << (state.discordUser.connected ? WideToUtf8(state.discordUser.createdAt) : "")
+        << "\",\"quests\":[";
     for (size_t i = 0; i < state.quests.size(); i++) {
         const auto& q = state.quests[i];
         if (i > 0) oss << ",";
@@ -195,12 +251,13 @@ void FlushStateIfDirty(AppState& state) {
 }
 
 std::string HttpRequestSync(const wchar_t* host, const wchar_t* path, const wchar_t* method,
-                            const std::string& body, const std::wstring& extraHeaders, int* outStatus = nullptr) {
+                            const std::string& body, const std::wstring& extraHeaders, int* outStatus = nullptr,
+                            std::string* outSessionCookie = nullptr) {
     if (outStatus) *outStatus = 0;
     HINTERNET hSession = WinHttpOpen(L"NixlabsDiscordHelper/1.0.14 (Windows NT 10.0; Win64; x64)",
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return "";
-    WinHttpSetTimeouts(hSession, 2500, 2500, 3000, 3000);
+    WinHttpSetTimeouts(hSession, 3500, 3500, 5000, 5000);
 
     HINTERNET hConnect = WinHttpConnect(hSession, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
@@ -231,6 +288,37 @@ std::string HttpRequestSync(const wchar_t* host, const wchar_t* path, const wcha
                             WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
         if (outStatus) *outStatus = (int)statusCode;
 
+        // Extract _nixlabs_session cookie from Set-Cookie headers if requested
+        if (outSessionCookie) {
+            DWORD index = 0;
+            while (true) {
+                DWORD cbCookie = 0;
+                WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_SET_COOKIE, WINHTTP_HEADER_NAME_BY_INDEX,
+                                    WINHTTP_NO_OUTPUT_BUFFER, &cbCookie, &index);
+                if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || cbCookie == 0) break;
+                std::wstring cookieHeader(cbCookie / sizeof(wchar_t), L'\0');
+                if (WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_SET_COOKIE, WINHTTP_HEADER_NAME_BY_INDEX,
+                                        &cookieHeader[0], &cbCookie, &index)) {
+                    std::string cookieUtf8 = WideToUtf8(cookieHeader);
+                    size_t pos = cookieUtf8.find("_nixlabs_session=");
+                    if (pos != std::string::npos) {
+                        std::string val = cookieUtf8.substr(pos + 17);
+                        size_t semi = val.find(';');
+                        if (semi != std::string::npos) val = val.substr(0, semi);
+                        while (!val.empty() && (val.back() == '\0' || val.back() == '\r' || val.back() == '\n')) {
+                            val.pop_back();
+                        }
+                        if (!val.empty()) {
+                            *outSessionCookie = val;
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
         DWORD dwAvailable = 0;
         while (WinHttpQueryDataAvailable(hRequest, &dwAvailable) && dwAvailable > 0) {
             std::string chunk(dwAvailable, '\0');
@@ -251,10 +339,43 @@ std::string HttpRequestSync(const wchar_t* host, const wchar_t* path, const wcha
 }
 
 void StartInitialSessionCheck(AppState& state) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    state.isLoadingAuth = false;
-    if (state.sessionCookie.empty()) {
-        state.isAuthenticated = false;
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        cookie = state.sessionCookie;
+        if (cookie.empty()) {
+            state.isLoadingAuth = false;
+            state.isAuthenticated = false;
+            return;
+        }
+    }
+
+    // Verify / refresh Nixlabs profile against accounts.nixlabs.tech/api/profile (exactly like auth.go GetSession)
+    if (cookie != "bench-session") {
+        std::wstring headers = L"Cookie: _nixlabs_session=" + Utf8ToWide(cookie) +
+                               L"\r\nAuthorization: Bearer " + Utf8ToWide(cookie) +
+                               L"\r\nAccept: application/json\r\n";
+        int status = 0;
+        std::string profileResp = HttpRequestSync(L"accounts.nixlabs.tech", L"/api/profile", L"GET", "", headers, &status);
+        {
+            std::lock_guard<std::mutex> lk(state.mu);
+            state.isLoadingAuth = false;
+            if (status == 200 && !profileResp.empty()) {
+                ApplyUserJsonToStateLocked(state, profileResp);
+                state.isAuthenticated = !state.account.banned;
+                SaveAuthToDisk(state);
+            } else if (status == 401) {
+                state.isAuthenticated = false;
+                state.sessionCookie.clear();
+                SaveAuthToDisk(state);
+                return;
+            }
+        }
+        // Automatically fetch the connected Discord account & token from Nixlabs Accounts
+        FetchDiscordUserProfile(state, false);
+    } else {
+        std::lock_guard<std::mutex> lk(state.mu);
+        state.isLoadingAuth = false;
     }
 }
 
@@ -269,27 +390,51 @@ void PerformLogin(AppState& state, const std::wstring& identifier, const std::ws
     std::thread([&state, identifier, password]() {
         std::string payload = "{\"identifier\":\"" + WideToUtf8(identifier) + "\",\"password\":\"" + WideToUtf8(password) + "\"}";
         int status = 0;
+        std::string sessionCookie;
+        std::wstring loginHeaders = L"Content-Type: application/json\r\nAccept: application/json\r\n"
+                                    L"X-Nixlabs-Client: discord-helper\r\nX-Nixlabs-Client-Version: 1.0.14\r\n";
         std::string resp = HttpRequestSync(L"accounts.nixlabs.tech", L"/api/login", L"POST",
-                                           payload, L"Content-Type: application/json\r\nAccept: application/json\r\n", &status);
-        {
-            std::lock_guard<std::mutex> lk(state.mu);
-            state.isSubmittingAuth = false;
-            if (status == 200) {
+                                           payload, loginHeaders, &status, &sessionCookie);
+        if (status == 200) {
+            if (sessionCookie.empty()) {
+                sessionCookie = ExtractJsonString(resp, "session_cookie");
+                if (sessionCookie.empty()) sessionCookie = ExtractJsonString(resp, "token");
+            }
+            std::string profileResp = resp;
+            if (!sessionCookie.empty()) {
+                std::wstring profHeaders = L"Cookie: _nixlabs_session=" + Utf8ToWide(sessionCookie) +
+                                           L"\r\nAuthorization: Bearer " + Utf8ToWide(sessionCookie) +
+                                           L"\r\nAccept: application/json\r\n";
+                int profStatus = 0;
+                std::string pr = HttpRequestSync(L"accounts.nixlabs.tech", L"/api/profile", L"GET", "", profHeaders, &profStatus);
+                if (profStatus == 200 && !pr.empty()) {
+                    profileResp = pr;
+                }
+            }
+            {
+                std::lock_guard<std::mutex> lk(state.mu);
+                state.isSubmittingAuth = false;
                 state.isAuthenticated = true;
+                state.sessionCookie = sessionCookie;
                 state.user.name = identifier;
                 state.user.handle = identifier;
                 state.user.role = L"MEMBER";
                 state.user.language = L"en-GB";
+                ApplyUserJsonToStateLocked(state, profileResp);
                 SaveAuthToDisk(state);
-            } else {
-                std::string err = ExtractJsonString(resp, "error");
-                state.authError = err.empty() ? L"Authentication failed." : Utf8ToWide(err);
-                if (status == 0 || status >= 500) {
-                    state.hasPendingNotification = true;
-                    state.notifyTitle = L"Authentication Error";
-                    state.notifyMessage = state.authError;
-                    state.notifyFlags = 0x00000003; /* NIIF_ERROR */
-                }
+            }
+            // Immediately fetch the connected Discord account & token from Nixlabs Accounts (matching Linux)
+            FetchDiscordUserProfile(state, false);
+        } else {
+            std::lock_guard<std::mutex> lk(state.mu);
+            state.isSubmittingAuth = false;
+            std::string err = ExtractJsonString(resp, "error");
+            state.authError = err.empty() ? L"Authentication failed." : Utf8ToWide(err);
+            if (status == 0 || status >= 500) {
+                state.hasPendingNotification = true;
+                state.notifyTitle = L"Authentication Error";
+                state.notifyMessage = state.authError;
+                state.notifyFlags = 0x00000003; /* NIIF_ERROR */
             }
         }
         if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
@@ -297,12 +442,23 @@ void PerformLogin(AppState& state, const std::wstring& identifier, const std::ws
 }
 
 void PerformLogout(AppState& state) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    state.isAuthenticated = false;
-    state.sessionCookie.clear();
-    state.user = SessionUser{};
-    state.discordUser = DiscordUser{};
-    state.stateDirty.store(true, std::memory_order_release);
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        cookie = state.sessionCookie;
+        state.isAuthenticated = false;
+        state.sessionCookie.clear();
+        state.user = SessionUser{};
+        state.discordUser = DiscordUser{};
+        state.discordToken.clear();
+        state.stateDirty.store(true, std::memory_order_release);
+    }
+    if (!cookie.empty() && cookie != "bench-session") {
+        std::thread([cookie]() {
+            std::wstring headers = L"Cookie: _nixlabs_session=" + Utf8ToWide(cookie) + L"\r\n";
+            HttpRequestSync(L"accounts.nixlabs.tech", L"/api/logout", L"POST", "", headers, nullptr);
+        }).detach();
+    }
     if (state.hwnd) InvalidateRect(state.hwnd, nullptr, FALSE);
 }
 

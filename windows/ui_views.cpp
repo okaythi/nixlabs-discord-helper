@@ -98,27 +98,21 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
     FillRoundRect(108.0f, 26.0f, 1.0f, 20.0f, 0.0f, border, headerAlpha);
     DrawTextStr(L.productName, m_fmtCardTitle, 122.0f, 24.0f, 200.0f, 28.0f, muted, headerAlpha);
 
-    // Locale switch dropdown trigger pill
-    const wchar_t* locCodes[] = {L"EN-UK", L"EN-US", L"FR-BE", L"JA", L"PT-BR", L"PT-PT"};
-    bool locHover = (state.hoveredTargetId == HIT_LOCALE_CYCLE) || state.isLocaleMenuOpen;
-    FillRoundRect(W - 318.0f, 20.0f, 74.0f, 32.0f, 16.0f, locHover ? hoverSubtle : subtle);
-    DrawRoundRect(W - 318.0f, 20.0f, 74.0f, 32.0f, 16.0f, state.isLocaleMenuOpen ? accent : border);
-    DrawTextStr(std::wstring(locCodes[(int)state.locale]) + L" \x25BE", m_fmtSmall, W - 304.0f, 28.0f, 56.0f, 20.0f, text);
-    RegisterHit(state, HIT_LOCALE_CYCLE, W - 318.0f, 20.0f, 74.0f, 32.0f);
-
-    // Theme button
+    // Theme button (exact SVG vector icon from frontend/src/components/icons/index.tsx)
     bool themeHover = (state.hoveredTargetId == HIT_THEME_TOGGLE);
     FillRoundRect(W - 234.0f, 18.0f, 36.0f, 36.0f, 18.0f, themeHover ? hoverSubtle : subtle);
     DrawRoundRect(W - 234.0f, 18.0f, 36.0f, 36.0f, 18.0f, themeHover ? accent : border);
-    DrawTextStr(state.darkMode ? L"\x2600" : L"\x263E", m_fmtBodyBold, W - 223.0f, 26.0f, 24.0f, 24.0f, text);
+    DrawThemeIcon(W - 216.0f, 36.0f, state.darkMode, text, headerAlpha);
     RegisterHit(state, HIT_THEME_TOGGLE, W - 234.0f, 18.0f, 36.0f, 36.0f);
 
-    // User badge
+    // User badge (avatar circle + @handle + vector logout icon)
     FillRoundRect(W - 188.0f, 18.0f, 160.0f, 36.0f, 18.0f, subtle);
     DrawRoundRect(W - 188.0f, 18.0f, 160.0f, 36.0f, 18.0f, border);
-    DrawTextStr(L"@" + (state.user.handle.empty() ? L"user" : state.user.handle), m_fmtSmall, W - 172.0f, 28.0f, 104.0f, 20.0f, text);
-    DrawTextStr(L"\x21AA", m_fmtBodyBold, W - 54.0f, 26.0f, 24.0f, 24.0f,
-                state.hoveredTargetId == HIT_LOGOUT ? 0xFFB4AB : muted);
+    FillRoundRect(W - 183.0f, 23.0f, 26.0f, 26.0f, 13.0f, accent, 0.25f);
+    std::wstring initCh = state.user.name.empty() ? L"U" : state.user.name.substr(0, 1);
+    DrawTextStr(initCh, m_fmtSmall, W - 174.0f, 28.0f, 16.0f, 18.0f, text);
+    DrawTextStr(L"@" + (state.user.handle.empty() ? L"user" : state.user.handle), m_fmtSmall, W - 151.0f, 28.0f, 88.0f, 20.0f, text);
+    DrawLogoutIcon(W - 44.0f, 36.0f, state.hoveredTargetId == HIT_LOGOUT ? 0xFFB4AB : muted, headerAlpha);
     RegisterHit(state, HIT_LOGOUT, W - 60.0f, 18.0f, 32.0f, 36.0f);
 
     // Sidebar (Wide mode) or Compact Top Navigation (Snap Layouts / narrow widths)
@@ -163,39 +157,29 @@ void UiRenderer::RenderHeaderAndSidebar(AppState& state, float W, float H) {
             RegisterHit(state, tabs[i].hit, tx, 62.0f, tabW, 28.0f);
         }
     }
+}
 
-    // Modern Windows 11 Flyout Dropdown for Locale Selection
-    if (state.isLocaleMenuOpen) {
-        const wchar_t* locLabels[] = {
-            L"English (UK) — EN-UK",
-            L"English (US) — EN-US",
-            L"Fran\x00e7" L"ais (BE) — FR-BE",
-            L"\x65e5\x672c\x8a9e — JA",
-            L"Portugu\x00ea" L"s (BR) — PT-BR",
-            L"Portugu\x00ea" L"s (PT) — PT-PT"
-        };
-        float menuW = 204.0f;
-        float menuH = 6 * 34.0f + 12.0f;
-        float menuX = W - 318.0f;
-        if (menuX + menuW > W - 16.0f) menuX = W - menuW - 16.0f;
-        float menuY = 56.0f;
-
-        FillRoundRect(menuX, menuY, menuW, menuH, 10.0f, state.darkMode ? 0x28292C : 0xFFFFFF, 0.98f);
-        DrawRoundRect(menuX, menuY, menuW, menuH, 10.0f, border, 1.2f);
-        for (int i = 0; i < 6; ++i) {
-            float iy = menuY + 6.0f + i * 34.0f;
-            bool selected = ((int)state.locale == i);
-            bool hovered = (state.hoveredTargetId == HIT_LOCALE_OPTION_BASE + i);
-            if (selected || hovered) {
-                FillRoundRect(menuX + 6.0f, iy, menuW - 12.0f, 30.0f, 6.0f, selected ? activeBg : hoverSubtle);
-            }
-            if (selected) {
-                FillRoundRect(menuX + 6.0f, iy + 7.0f, 3.0f, 16.0f, 1.5f, accent);
-            }
-            DrawTextStr(locLabels[i], m_fmtSmall, menuX + 18.0f, iy + 7.0f, menuW - 28.0f, 18.0f, selected ? activeText : text);
-            RegisterHit(state, HIT_LOCALE_OPTION_BASE + i, menuX + 6.0f, iy, menuW - 12.0f, 30.0f);
-        }
+static std::wstring FormatLanguageDisplayName(const std::wstring& raw) {
+    if (raw.empty()) return L"English (GB)";
+    LocaleId lid = ResolveLocaleFromCode(raw);
+    switch (lid) {
+        case LocaleId::EN_UK: return L"English (GB)";
+        case LocaleId::EN_US: return L"English (US)";
+        case LocaleId::FR_BE: return L"French (BE)";
+        case LocaleId::JA:    return L"Japanese";
+        case LocaleId::PT_BR: return L"Portuguese (BR)";
+        case LocaleId::PT_PT: return L"Portuguese (PT)";
     }
+    return raw;
+}
+
+static UINT32 ParseHexBannerColor(const std::wstring& hex, UINT32 fallback) {
+    if (hex.empty()) return fallback;
+    const wchar_t* p = hex.c_str();
+    if (*p == L'#') p++;
+    unsigned long val = std::wcstoul(p, nullptr, 16);
+    if (val == 0 && p[0] != L'0') return fallback;
+    return static_cast<UINT32>(val & 0xFFFFFF);
 }
 
 void UiRenderer::RenderAccountTab(AppState& state, float x, float y, float w) {
@@ -204,31 +188,60 @@ void UiRenderer::RenderAccountTab(AppState& state, float x, float y, float w) {
     UINT32 border = state.darkMode ? 0x42454A : 0xDCE1E7;
     UINT32 text = state.darkMode ? 0xE8EAED : 0x202124;
     UINT32 muted = state.darkMode ? 0xADB2B9 : 0x5C626B;
+    UINT32 accent = (state.accentColor != 0) ? state.accentColor : (state.darkMode ? 0xA8CDFF : 0x0B57C3);
 
     // Discord Hero Card
     FillRoundRect(x, y, w, 280.0f, 16.0f, cardBg, 0.92f);
-    FillRoundRect(x, y, w, 110.0f, 16.0f, state.discordUser.connected ? 0x5865F2 : 0x323436);
+    UINT32 bannerCol = state.discordUser.connected
+        ? ParseHexBannerColor(state.discordUser.bannerColor, 0x5865F2)
+        : (state.darkMode ? 0x323436 : 0xE7ECF4);
+    FillRoundRect(x, y, w, 110.0f, 16.0f, bannerCol);
     DrawRoundRect(x, y, w, 280.0f, 16.0f, border);
 
     FillRoundRect(x + w - 98.0f, y + 14.0f, 82.0f, 26.0f, 12.0f, 0x101214, 0.7f);
     DrawTextStr(L"Discord", m_fmtSmall, x + w - 82.0f, y + 19.0f, 64.0f, 18.0f, 0xFFFFFF);
 
+    FillRoundRect(x + 20.0f, y + 70.0f, 80.0f, 80.0f, 40.0f, cardBg);
     FillRoundRect(x + 24.0f, y + 74.0f, 72.0f, 72.0f, 36.0f, 0x5865F2);
-    DrawTextStr(state.discordUser.connected ? L"D" : L"?", m_fmtTitle, x + 50.0f, y + 92.0f, 36.0f, 36.0f, 0xFFFFFF);
+    std::wstring avGlyph = L"?";
+    if (state.discordUser.connected) {
+        const std::wstring& disp = !state.discordUser.globalName.empty() ? state.discordUser.globalName : state.discordUser.username;
+        if (!disp.empty()) avGlyph = disp.substr(0, 1);
+        else avGlyph = L"D";
+    }
+    DrawTextStr(avGlyph, m_fmtTitle, x + 50.0f, y + 92.0f, 36.0f, 36.0f, 0xFFFFFF);
 
-    DrawTextStr(state.discordUser.connected ? state.discordUser.globalName : L.discordNotConnected,
-                m_fmtTitle, x + 24.0f, y + 156.0f, w - 120.0f, 32.0f, text);
-    DrawTextStr(state.discordUser.connected ? (L"@" + state.discordUser.username) : L.discordConnectPrompt,
+    std::wstring heroTitle = state.isLoadingDiscord
+        ? L.loadingDetails
+        : (state.discordUser.connected
+            ? (!state.discordUser.globalName.empty() ? state.discordUser.globalName : state.discordUser.username)
+            : L.discordNotConnected);
+    DrawTextStr(heroTitle, m_fmtTitle, x + 24.0f, y + 156.0f, w - 120.0f, 32.0f, text);
+    DrawTextStr(state.discordUser.connected ? (L"@" + state.discordUser.username) : (state.isLoadingDiscord ? L"" : L.discordConnectPrompt),
                 m_fmtBody, x + 24.0f, y + 190.0f, w - 48.0f, 24.0f, muted);
 
+    if (state.discordUser.connected) {
+        bool refHover = (state.hoveredTargetId == HIT_DISCORD_REFRESH_BTN);
+        FillRoundRect(x + w - 60.0f, y + 156.0f, 36.0f, 36.0f, 18.0f, refHover ? (state.darkMode ? 0x383B3F : 0xDAE2EE) : (state.darkMode ? 0x2C2E31 : 0xE7ECF4));
+        DrawRoundRect(x + w - 60.0f, y + 156.0f, 36.0f, 36.0f, 18.0f, refHover ? accent : border);
+        DrawTextStr(L"\x21BB", m_fmtBodyBold, x + w - 48.0f, y + 164.0f, 20.0f, 20.0f, text);
+        RegisterHit(state, HIT_DISCORD_REFRESH_BTN, x + w - 60.0f, y + 156.0f, 36.0f, 36.0f);
+    }
+
     if (!state.discordUser.connected) {
-        UINT32 btnColor = (state.hoveredTargetId == HIT_DISCORD_CONNECT_BTN) ? 0x6975F5 : 0x5865F2;
-        FillRoundRect(x + 24.0f, y + 224.0f, 176.0f, 38.0f, 19.0f, btnColor);
-        DrawTextStr(L.connectDiscord, m_fmtBodyBold, x + 46.0f, y + 233.0f, 140.0f, 22.0f, 0xFFFFFF);
-        RegisterHit(state, HIT_DISCORD_CONNECT_BTN, x + 24.0f, y + 224.0f, 176.0f, 38.0f);
+        if (!state.isLoadingDiscord) {
+            UINT32 btnColor = (state.hoveredTargetId == HIT_DISCORD_CONNECT_BTN) ? 0x6975F5 : 0x5865F2;
+            FillRoundRect(x + 24.0f, y + 224.0f, 176.0f, 38.0f, 19.0f, btnColor);
+            DrawTextStr(L.connectDiscord, m_fmtBodyBold, x + 46.0f, y + 233.0f, 140.0f, 22.0f, 0xFFFFFF);
+            RegisterHit(state, HIT_DISCORD_CONNECT_BTN, x + 24.0f, y + 224.0f, 176.0f, 38.0f);
+            if (!state.discordError.empty()) {
+                DrawTextStr(state.discordError, m_fmtSmall, x + 216.0f, y + 234.0f, w - 240.0f, 20.0f, 0xFFB4AB);
+            }
+        }
     } else {
-        DrawTextStr(std::wstring(L.creationDateLabel) + L": " + state.discordUser.createdAt, m_fmtSmall, x + 24.0f, y + 232.0f, 260.0f, 20.0f, text);
-        DrawTextStr(std::wstring(L.userIdLabel) + L": " + state.discordUser.id, m_fmtMono, x + 300.0f, y + 232.0f, 260.0f, 20.0f, text);
+        DrawTextStr(std::wstring(L.creationDateLabel) + L": " + (state.discordUser.createdAt.empty() ? L"—" : state.discordUser.createdAt),
+                    m_fmtSmall, x + 24.0f, y + 232.0f, 280.0f, 20.0f, text);
+        DrawTextStr(std::wstring(L.userIdLabel) + L": " + state.discordUser.id, m_fmtMono, x + 310.0f, y + 232.0f, 260.0f, 20.0f, text);
         DrawTextStr(L.discordDisconnect, m_fmtSmall, x + w - 110.0f, y + 232.0f, 90.0f, 20.0f, 0xFFB4AB);
         RegisterHit(state, HIT_DISCORD_DISCONNECT_BTN, x + w - 115.0f, y + 226.0f, 100.0f, 28.0f);
     }
@@ -244,8 +257,8 @@ void UiRenderer::RenderAccountTab(AppState& state, float x, float y, float w) {
     DrawTextStr(L.standingGood, m_fmtSmall, x + w - 130.0f, ny + 63.0f, 100.0f, 18.0f, 0x8CD6A7);
 
     DrawTextStr(std::wstring(L.emailLabel) + L": " + state.user.email, m_fmtSmall, x + 24.0f, ny + 120.0f, 280.0f, 20.0f, muted);
-    DrawTextStr(std::wstring(L.roleLabel) + L": " + state.user.role, m_fmtSmall, x + 320.0f, ny + 120.0f, 160.0f, 20.0f, muted);
-    DrawTextStr(std::wstring(L.languageLabel) + L": " + state.user.language, m_fmtSmall, x + 500.0f, ny + 120.0f, 180.0f, 20.0f, muted);
+    DrawTextStr(std::wstring(L.roleLabel) + L": " + (state.user.role.empty() ? L"MEMBER" : state.user.role), m_fmtSmall, x + 320.0f, ny + 120.0f, 160.0f, 20.0f, muted);
+    DrawTextStr(std::wstring(L.languageLabel) + L": " + FormatLanguageDisplayName(state.user.language), m_fmtSmall, x + 500.0f, ny + 120.0f, 220.0f, 20.0f, muted);
 }
 
 void UiRenderer::RenderQuestsTab(AppState& state, float x, float y, float w) {
@@ -454,6 +467,10 @@ void UiRenderer::RenderDiscordModal(AppState& state, float W, float H) {
         DrawRoundRect(mx + 24.0f, my + 204.0f, mw - 48.0f, 36.0f, 8.0f, 0x42454A);
         RegisterHit(state, HIT_MODAL_PASSWORD_INPUT, mx + 24.0f, my + 204.0f, mw - 48.0f, 36.0f);
     }
+
+    DrawTextStr(L.manageInMyAccount, m_fmtSmall, mx + 24.0f, my + mh - 46.0f, 200.0f, 20.0f,
+                state.hoveredTargetId == HIT_MODAL_MYACCOUNT_LINK ? accent : 0xADB2B9);
+    RegisterHit(state, HIT_MODAL_MYACCOUNT_LINK, mx + 24.0f, my + mh - 52.0f, 200.0f, 28.0f);
 
     FillRoundRect(mx + mw - 170.0f, my + mh - 56.0f, 146.0f, 36.0f, 18.0f, accent);
     DrawTextStr(state.modalTab == ModalTab::Token ? L.discordSaveTokenBtn : L.connectDiscord,

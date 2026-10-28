@@ -16,10 +16,12 @@ namespace ApiClient {
 
 std::wstring Utf8ToWide(const std::string& str);
 std::string WideToUtf8(const std::wstring& wstr);
-std::string ReadSmallFileSync(const std::wstring& path);
-void WriteFileSyncFlush(const std::wstring& path, const std::string& data);
+std::string ExtractJsonString(const std::string& json, const char* key);
+int ExtractJsonInt(const std::string& json, const char* key, int defaultVal = 0);
+bool ExtractJsonBool(const std::string& json, const char* key, bool defaultVal = false);
 std::string HttpRequestSync(const wchar_t* host, const wchar_t* path, const wchar_t* method,
-                            const std::string& body, const std::wstring& extraHeaders, int* outStatus);
+                            const std::string& body, const std::wstring& extraHeaders, int* outStatus,
+                            std::string* outSessionCookie = nullptr);
 
 // Mirrors backend/internal/quests/engine.go questRecency + sortQuestsByRecency
 static void ComputeQuestRecency(const QuestItem& q, int64_t& outTs, uint64_t& outSf) {
@@ -120,17 +122,137 @@ void ScrapeDiscordBuildNumberSync(AppState& state) {
     state.discordBuildNumber = 504649;
 }
 
+static std::wstring FormatDiscordCreationDate(const std::string& isoOrRaw, const std::string& snowflakeId) {
+    if (!isoOrRaw.empty() && isoOrRaw.size() >= 16) {
+        int y = 0, m = 0, d = 0, hh = 0, mm = 0;
+        if (sscanf(isoOrRaw.c_str(), "%d-%d-%dT%d:%d", &y, &m, &d, &hh, &mm) >= 3) {
+            wchar_t buf[64] = {0};
+            swprintf(buf, 64, L"%02d/%02d/%04d, %02d:%02d", d, m, y, hh, mm);
+            return buf;
+        }
+        return Utf8ToWide(isoOrRaw);
+    }
+    if (!snowflakeId.empty()) {
+        unsigned long long sf = std::strtoull(snowflakeId.c_str(), nullptr, 10);
+        if (sf > 0) {
+            time_t sec = static_cast<time_t>(((sf >> 22ULL) + 1420070400000ULL) / 1000ULL);
+            struct tm utcTm = {0};
+            gmtime_s(&utcTm, &sec);
+            wchar_t buf[64] = {0};
+            swprintf(buf, 64, L"%02d/%02d/%04d, %02d:%02d",
+                     utcTm.tm_mday, utcTm.tm_mon + 1, utcTm.tm_year + 1900, utcTm.tm_hour, utcTm.tm_min);
+            return buf;
+        }
+    }
+    return L"—";
+}
+
 void FetchDiscordUserProfile(AppState& state, bool forceRefresh) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    (void)forceRefresh;
-    state.isLoadingDiscord = false;
-    state.isRefreshingDiscord = false;
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        cookie = state.sessionCookie;
+        if (cookie.empty() || cookie == "bench-session") {
+            state.isLoadingDiscord = false;
+            state.isRefreshingDiscord = false;
+            return;
+        }
+        state.isLoadingDiscord = !state.discordUser.connected;
+        state.isRefreshingDiscord = forceRefresh;
+        state.discordError.clear();
+    }
+    if (state.hwnd) InvalidateRect(state.hwnd, nullptr, FALSE);
+
+    std::thread([&state, cookie, forceRefresh]() {
+        std::wstring headers = L"Authorization: Bearer " + Utf8ToWide(cookie) +
+                               L"\r\nCookie: _nixlabs_session=" + Utf8ToWide(cookie) +
+                               L"\r\nAccept: application/json\r\n";
+
+        // 1. Fetch Discord Bot Profile from Nixlabs Accounts (exact match with backend/internal/auth/auth.go GetDiscordBotProfile)
+        const wchar_t* botProfilePath = forceRefresh
+            ? L"/api/third-party-auth/discord-helper/bot-profile?refresh=true"
+            : L"/api/third-party-auth/discord-helper/bot-profile";
+        int profStatus = 0;
+        std::string profResp = HttpRequestSync(L"accounts.nixlabs.tech", botProfilePath, L"GET", "", headers, &profStatus);
+
+        // 2. Reveal encrypted Discord user token from Nixlabs Accounts (exact match with backend/internal/auth/auth.go GetDiscordToken)
+        int revStatus = 0;
+        std::string revResp = HttpRequestSync(L"accounts.nixlabs.tech",
+                                              L"/api/third-party-auth/discord-helper/reveal",
+                                              L"POST", "", headers, &revStatus);
+        std::string revealedToken;
+        if (revStatus == 200) {
+            revealedToken = ExtractJsonString(revResp, "token");
+        }
+
+        // If bot-profile isn't returned directly but we have the revealed Discord token, query Discord /api/v9/users/@me as fallback
+        if (profStatus != 200 && !revealedToken.empty()) {
+            std::wstring dHeaders = L"Authorization: " + Utf8ToWide(revealedToken) + L"\r\nAccept: application/json\r\n";
+            int meStatus = 0;
+            std::string meResp = HttpRequestSync(L"discord.com", L"/api/v9/users/@me", L"GET", "", dHeaders, &meStatus);
+            if (meStatus == 200 && !meResp.empty()) {
+                profStatus = 200;
+                profResp = meResp;
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(state.mu);
+            state.isLoadingDiscord = false;
+            state.isRefreshingDiscord = false;
+            if (!revealedToken.empty()) {
+                state.discordToken = revealedToken;
+            }
+
+            if (profStatus == 200 && !profResp.empty()) {
+                std::string id = ExtractJsonString(profResp, "id");
+                std::string username = ExtractJsonString(profResp, "username");
+                std::string globalName = ExtractJsonString(profResp, "global_name");
+                std::string bannerColor = ExtractJsonString(profResp, "banner_color");
+                std::string createdAt = ExtractJsonString(profResp, "created_at");
+                if (!id.empty() || !username.empty()) {
+                    state.discordUser.connected = true;
+                    state.discordUser.id = Utf8ToWide(id);
+                    state.discordUser.username = Utf8ToWide(username);
+                    state.discordUser.globalName = globalName.empty() ? state.discordUser.username : Utf8ToWide(globalName);
+                    state.discordUser.bannerColor = Utf8ToWide(bannerColor);
+                    state.discordUser.createdAt = FormatDiscordCreationDate(createdAt, id);
+                    state.discordError.clear();
+                    SaveAuthToDisk(state);
+                }
+            } else if (profStatus == 404 || revStatus == 404) {
+                state.discordUser = DiscordUser{};
+                state.discordToken.clear();
+                state.discordError.clear();
+            } else if (profStatus == 422 || revStatus == 422) {
+                state.discordUser = DiscordUser{};
+                state.discordToken.clear();
+                state.discordError = GetLocale(state.locale).discordTokenInvalid;
+            }
+        }
+        if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+    }).detach();
 }
 
 void DisconnectDiscordAccount(AppState& state) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    state.discordUser = DiscordUser{};
-    state.discordToken.clear();
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        cookie = state.sessionCookie;
+        state.discordUser = DiscordUser{};
+        state.discordToken.clear();
+        SaveAuthToDisk(state);
+    }
+    if (!cookie.empty() && cookie != "bench-session") {
+        std::thread([&state, cookie]() {
+            std::wstring headers = L"Authorization: Bearer " + Utf8ToWide(cookie) +
+                                   L"\r\nCookie: _nixlabs_session=" + Utf8ToWide(cookie) +
+                                   L"\r\nAccept: application/json\r\n";
+            HttpRequestSync(L"accounts.nixlabs.tech", L"/api/third-party-auth/discord-helper/token",
+                            L"DELETE", "", headers, nullptr);
+            if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+        }).detach();
+    }
 }
 
 void SubmitDiscordCredentials(AppState& state) {
@@ -144,16 +266,69 @@ void SubmitDiscordMfa(AppState& state) {
 }
 
 void SubmitDiscordToken(AppState& state) {
-    std::lock_guard<std::mutex> lk(state.mu);
-    if (!state.modalToken.empty()) {
-        state.discordToken = WideToUtf8(state.modalToken);
-        state.discordUser.connected = true;
-        state.discordUser.id = L"213379314000000000";
-        state.discordUser.username = L"okaythi";
-        state.discordUser.globalName = L"thy";
-        state.discordUser.createdAt = L"2016-08-14 19:22";
-        state.isModalOpen = false;
+    std::string token;
+    std::string cookie;
+    {
+        std::lock_guard<std::mutex> lk(state.mu);
+        if (state.modalToken.empty()) return;
+        token = WideToUtf8(state.modalToken);
+        cookie = state.sessionCookie;
+        state.isModalSubmitting = true;
+        state.modalError.clear();
     }
+    if (state.hwnd) InvalidateRect(state.hwnd, nullptr, FALSE);
+
+    std::thread([&state, token, cookie]() {
+        bool savedOnAccounts = false;
+        if (!cookie.empty() && cookie != "bench-session") {
+            std::wstring headers = L"Authorization: Bearer " + Utf8ToWide(cookie) +
+                                   L"\r\nCookie: _nixlabs_session=" + Utf8ToWide(cookie) +
+                                   L"\r\nContent-Type: application/json\r\nAccept: application/json\r\n";
+            std::string body = "{\"token\":\"" + token + "\"}";
+            int putStatus = 0;
+            HttpRequestSync(L"accounts.nixlabs.tech", L"/api/third-party-auth/discord-helper/token",
+                            L"PUT", body, headers, &putStatus);
+            if (putStatus == 200 || putStatus == 201 || putStatus == 204) {
+                savedOnAccounts = true;
+            }
+        }
+
+        // Also verify directly against Discord /api/v9/users/@me for immediate feedback
+        std::wstring dHeaders = L"Authorization: " + Utf8ToWide(token) + L"\r\nAccept: application/json\r\n";
+        int meStatus = 0;
+        std::string meResp = HttpRequestSync(L"discord.com", L"/api/v9/users/@me", L"GET", "", dHeaders, &meStatus);
+
+        {
+            std::lock_guard<std::mutex> lk(state.mu);
+            state.isModalSubmitting = false;
+            if (meStatus == 200 && !meResp.empty()) {
+                std::string id = ExtractJsonString(meResp, "id");
+                std::string username = ExtractJsonString(meResp, "username");
+                std::string globalName = ExtractJsonString(meResp, "global_name");
+                std::string bannerColor = ExtractJsonString(meResp, "banner_color");
+                state.discordToken = token;
+                state.discordUser.connected = true;
+                state.discordUser.id = Utf8ToWide(id);
+                state.discordUser.username = Utf8ToWide(username);
+                state.discordUser.globalName = globalName.empty() ? state.discordUser.username : Utf8ToWide(globalName);
+                state.discordUser.bannerColor = Utf8ToWide(bannerColor);
+                state.discordUser.createdAt = FormatDiscordCreationDate("", id);
+                state.isModalOpen = false;
+                state.modalToken.clear();
+                SaveAuthToDisk(state);
+            } else if (savedOnAccounts) {
+                state.discordToken = token;
+                state.isModalOpen = false;
+                state.modalToken.clear();
+            } else {
+                state.modalError = GetLocale(state.locale).discordTokenInvalid;
+            }
+        }
+        if (savedOnAccounts) {
+            FetchDiscordUserProfile(state, true);
+        }
+        if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+    }).detach();
 }
 
 void FetchQuestsList(AppState& state, bool forceRefresh) {

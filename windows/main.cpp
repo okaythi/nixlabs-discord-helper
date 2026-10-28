@@ -126,12 +126,6 @@ static void HandleClick(HWND hwnd, int x, int y) {
         g_state.accentColor = ShellIntegration::QuerySystemAccentColor(g_state.darkMode);
         ShellIntegration::ApplyWindows11FrameAttributes(hwnd, g_state.darkMode);
         ApiClient::SaveAuthToDisk(g_state);
-    } else if (hitId == HIT_LOCALE_CYCLE) {
-        g_state.isLocaleMenuOpen = !g_state.isLocaleMenuOpen;
-    } else if (hitId >= HIT_LOCALE_OPTION_BASE && hitId < HIT_LOCALE_OPTION_BASE + 6) {
-        g_state.locale = static_cast<LocaleId>(hitId - HIT_LOCALE_OPTION_BASE);
-        g_state.isLocaleMenuOpen = false;
-        ApiClient::SaveAuthToDisk(g_state);
     } else if (hitId == HIT_LOGOUT) {
         ApiClient::PerformLogout(g_state);
     } else if (hitId == HIT_TAB_ACCOUNT) {
@@ -161,6 +155,8 @@ static void HandleClick(HWND hwnd, int x, int y) {
         g_state.loginMode = LoginMode::Card;
     } else if (hitId == HIT_DISCORD_CONNECT_BTN) {
         g_state.isModalOpen = true;
+    } else if (hitId == HIT_DISCORD_REFRESH_BTN) {
+        ApiClient::FetchDiscordUserProfile(g_state, true);
     } else if (hitId == HIT_DISCORD_DISCONNECT_BTN) {
         ApiClient::DisconnectDiscordAccount(g_state);
     } else if (hitId == HIT_MODAL_CLOSE) {
@@ -172,6 +168,8 @@ static void HandleClick(HWND hwnd, int x, int y) {
         g_state.focusedInput = FocusedInput::ModalToken;
     } else if (hitId == HIT_MODAL_TOKEN_INPUT) {
         g_state.focusedInput = FocusedInput::ModalToken;
+    } else if (hitId == HIT_MODAL_MYACCOUNT_LINK) {
+        ShellExecuteW(nullptr, L"open", L"https://myaccount.nixlabs.tech/apps", nullptr, nullptr, SW_SHOWNORMAL);
     } else if (hitId == HIT_MODAL_SUBMIT) {
         if (g_state.modalTab == ModalTab::Token) ApiClient::SubmitDiscordToken(g_state);
         else ApiClient::SubmitDiscordCredentials(g_state);
@@ -495,7 +493,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_state.isAuthenticated = true;
                 g_state.user = {L"101", L"thy", L"okaythi", L"thy@nixlabs.tech", L"", L"PRO", L"en-GB"};
                 g_state.sessionCookie = "bench-session";
-                ApiClient::SaveAuthToDisk(g_state);
                 HandleClick(hwnd, 80, 115); // Account tab
             } else if (g_benchPhase == 2) {
                 HandleClick(hwnd, 80, 168); // Quests tab
