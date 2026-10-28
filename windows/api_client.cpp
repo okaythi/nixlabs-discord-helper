@@ -165,9 +165,12 @@ void SaveAuthToDisk(AppState& state) {
 
 void FlushStateIfDirty(AppState& state) {
     if (!state.stateDirty.exchange(false, std::memory_order_acq_rel)) return;
+    static const char* const kLocaleCodes[] = {"en-uk", "en-us", "fr-be", "ja", "pt-br", "pt-pt"};
+    int locIdx = static_cast<int>(state.locale);
+    if (locIdx < 0 || locIdx > 5) locIdx = 0;
     std::ostringstream oss;
     oss << "{\"theme\":\"" << (state.darkMode ? "dark" : "light")
-        << "\",\"locale\":\"" << WideToUtf8(GetLocaleCode(state.locale))
+        << "\",\"locale\":\"" << kLocaleCodes[locIdx]
         << "\",\"session_cookie\":\"" << state.sessionCookie
         << "\",\"updated_at\":\"" << state.authUpdatedAt
         << "\",\"user\":{\"name\":\"" << WideToUtf8(state.user.name)
