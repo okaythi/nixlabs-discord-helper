@@ -109,9 +109,7 @@ static void HandleClick(HWND hwnd, int x, int y) {
     } else if (hitId == HIT_TAB_ACCOUNT) {
         g_state.activeTab = NavTab::Account;
         g_state.scrollY = 0;
-        // Baseline redundant reload on tab switch
         ApiClient::LoadStateFromDisk(g_state);
-        LoadLooseIconsSyncBaseline(hwnd);
     } else if (hitId == HIT_TAB_QUESTS) {
         g_state.activeTab = NavTab::Quests;
         g_state.scrollY = 0;
