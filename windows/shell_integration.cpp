@@ -93,7 +93,7 @@ void InitializeProcessIdentity() {
 bool ActivateExistingInstanceIfRunning() {
     HANDLE hMutex = CreateMutexW(nullptr, FALSE, L"Local\\NixlabsDiscordHelper_SingleInstance_Mutex");
     if (hMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND hExisting = FindWindowW(L"NixlabsDiscordHelperWnd", nullptr);
+        HWND hExisting = FindWindowW(nullptr, L"Discord Helper");
         if (hExisting) {
             if (!IsWindowVisible(hExisting)) {
                 ShowWindow(hExisting, SW_SHOW);
@@ -491,7 +491,7 @@ bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     wchar_t exePath[MAX_PATH] = {0};
     if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH)) {
-        if (SUCCEEDED(hrCom)) CoUninitialize();
+        if (hrCom == S_OK) CoUninitialize();
         return false;
     }
 
@@ -576,7 +576,7 @@ bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
                                L"Discord Helper is now registered in the Windows 11 Start menu and Installed Apps.",
                                NIIF_USER);
     }
-    if (SUCCEEDED(hrCom)) CoUninitialize();
+    if (hrCom == S_OK) CoUninitialize();
     return true;
 }
 
