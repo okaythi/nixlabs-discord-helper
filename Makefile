@@ -71,12 +71,15 @@ windows: frontend
 	rm -rf backend/cmd/nixlabs-discord-helper/dist
 	cp -r frontend/dist backend/cmd/nixlabs-discord-helper/dist
 	cd backend && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o ../nixlabs-discord-helper-bin.exe ./cmd/nixlabs-discord-helper
+	@echo "==> Generating multi-resolution Windows 11 .ico and compiling resources..."
+	python3 windows/generate_ico.py
+	x86_64-w64-mingw32-windres windows/resource.rc -O coff -o windows/resource.o
 	@echo "==> Building native Windows 11 Direct2D app..."
 	x86_64-w64-mingw32-g++-posix -O2 -s -std=c++17 -fno-rtti -ffunction-sections -fdata-sections -municode \
-		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp \
+		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp windows/shell_integration.cpp windows/resource.o \
 		-o nixlabs-discord-helper.exe \
 		-Wl,--gc-sections -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -mwindows
+		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -lpropsys -mwindows
 
 install: deb
 	@echo "==> Installing $(DEB_NAME)..."

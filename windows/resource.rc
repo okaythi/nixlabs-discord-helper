@@ -1,0 +1,35 @@
+#include <windows.h>
+
+#define IDI_APP_ICON 101
+
+IDI_APP_ICON ICON "app.ico"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,0,14,0
+PRODUCTVERSION  1,0,14,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Nixlabs\0"
+            VALUE "FileDescription",  "Nixlabs Discord Helper\0"
+            VALUE "FileVersion",      "1.0.14.0\0"
+            VALUE "InternalName",     "nixlabs-discord-helper\0"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 Nixlabs\0"
+            VALUE "OriginalFilename", "nixlabs-discord-helper.exe\0"
+            VALUE "ProductName",      "Discord Helper\0"
+            VALUE "ProductVersion",   "1.0.14.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

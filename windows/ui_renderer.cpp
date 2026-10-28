@@ -17,6 +17,9 @@ UiRenderer::~UiRenderer() {
 
 bool UiRenderer::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
+    UINT dpi = GetDpiForWindow(hwnd);
+    m_dpi = (dpi > 0) ? static_cast<float>(dpi) : 96.0f;
+
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &m_factory))) return false;
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&m_dwrite)))) return false;
 
@@ -36,14 +39,24 @@ bool UiRenderer::EnsureTarget() {
     RECT rc;
     GetClientRect(m_hwnd, &rc);
     D2D1_SIZE_U sz = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
-    D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties();
-    rtProps.dpiX = 96.0f;
-    rtProps.dpiY = 96.0f;
+    D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+        m_dpi, m_dpi
+    );
     if (FAILED(m_factory->CreateHwndRenderTarget(rtProps, D2D1::HwndRenderTargetProperties(m_hwnd, sz), &m_rt))) {
         return false;
     }
+    m_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_brush);
     return true;
+}
+
+void UiRenderer::SetDpi(UINT dpi) {
+    m_dpi = (dpi > 0) ? static_cast<float>(dpi) : 96.0f;
+    if (m_rt) {
+        m_rt->SetDpi(m_dpi, m_dpi);
+    }
 }
 
 void UiRenderer::DiscardResources() {
@@ -84,11 +97,12 @@ void UiRenderer::DrawTextStr(const std::wstring& text, IDWriteTextFormat* fmt, f
 }
 
 void UiRenderer::RegisterHit(AppState& state, int id, float x, float y, float w, float h) {
+    float scale = m_dpi / 96.0f;
     RECT rc;
-    rc.left = (LONG)x;
-    rc.top = (LONG)y;
-    rc.right = (LONG)(x + w);
-    rc.bottom = (LONG)(y + h);
+    rc.left = static_cast<LONG>(x * scale);
+    rc.top = static_cast<LONG>(y * scale);
+    rc.right = static_cast<LONG>((x + w) * scale);
+    rc.bottom = static_cast<LONG>((y + h) * scale);
     state.clickTargets.push_back({id, rc});
 }
 
@@ -97,26 +111,35 @@ void UiRenderer::Render(AppState& state) {
 
     std::lock_guard<std::mutex> lk(state.mu);
     state.clickTargets.clear();
+    state.dpiScale = m_dpi / 96.0f;
 
     D2D1_SIZE_F sz = m_rt->GetSize();
     float W = sz.width;
     float H = sz.height;
 
-    UINT32 bg = state.darkMode ? 0x1E1F20 : 0xF8FAFD;
+    UINT32 fallbackBg = state.darkMode ? 0x1E1F20 : 0xF3F6FC;
 
     m_rt->BeginDraw();
-    m_rt->Clear(D2D1::ColorF(bg));
+    // Clear with semi-transparent tint so real Windows 11 DWM Mica material shines through
+    // while retaining readable contrast even if transparency is disabled in Windows Settings.
+    float baseAlpha = state.darkMode ? 0.72f : 0.78f;
+    m_rt->Clear(D2D1::ColorF(
+        ((fallbackBg >> 16) & 0xFF) / 255.0f,
+        ((fallbackBg >> 8) & 0xFF) / 255.0f,
+        (fallbackBg & 0xFF) / 255.0f,
+        baseAlpha
+    ));
 
     if (!state.isAuthenticated) {
         RenderLoginScreen(state, W, H);
     } else {
-        float contentX = (W > 760.0f) ? 260.0f : 24.0f;
-        float contentW = (W > 760.0f) ? (W - 284.0f) : (W - 48.0f);
+        float contentX = (W > 700.0f) ? 252.0f : 20.0f;
+        float contentW = (W > 700.0f) ? (W - 272.0f) : (W - 40.0f);
         if (contentW > 852.0f) {
             contentX += (contentW - 852.0f) * 0.5f;
             contentW = 852.0f;
         }
-        float contentY = 96.0f - (float)state.scrollY;
+        float contentY = 92.0f - static_cast<float>(state.scrollY);
 
         if (state.activeTab == NavTab::Account) {
             RenderAccountTab(state, contentX, contentY, contentW);

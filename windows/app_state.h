@@ -127,9 +127,21 @@ struct AppState {
     std::mutex mu;
     HWND hwnd = nullptr;
 
-    // Theme & Locale
+    // Theme, Accent & DPI
     bool darkMode = true;
+    bool userOverrodeTheme = false;
+    UINT32 accentColor = 0xA8CDFF;
+    float dpiScale = 1.0f;
+    bool isWindowActive = true;
+    bool isLocaleMenuOpen = false;
+    float animatedProgressPct = 0.0f;
     LocaleId locale = LocaleId::EN_UK;
+
+    // Pending Native System Notification
+    bool hasPendingNotification = false;
+    std::wstring notifyTitle;
+    std::wstring notifyMessage;
+    DWORD notifyFlags = 0x00000004; /* NIIF_USER */
 
     // Auth & Session
     bool isLoadingAuth = true;

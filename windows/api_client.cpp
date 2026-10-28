@@ -136,8 +136,11 @@ void LoadStateFromDisk(AppState& state) {
     std::string stateData = ReadSequentialFile(GetConfigDirPath() + L"\\state.json");
     std::lock_guard<std::mutex> lk(state.mu);
     if (!stateData.empty()) {
+        state.userOverrodeTheme = ExtractJsonBool(stateData, "user_theme_override", false);
         std::string th = ExtractJsonString(stateData, "theme");
-        if (!th.empty()) state.darkMode = (th != "light");
+        if (!th.empty() && state.userOverrodeTheme) {
+            state.darkMode = (th != "light");
+        }
 
         std::string loc = ExtractJsonString(stateData, "locale");
         if (!loc.empty()) state.locale = ResolveLocaleFromCode(Utf8ToWide(loc));
@@ -170,7 +173,8 @@ void FlushStateIfDirty(AppState& state) {
     if (locIdx < 0 || locIdx > 5) locIdx = 0;
     std::ostringstream oss;
     oss << "{\"theme\":\"" << (state.darkMode ? "dark" : "light")
-        << "\",\"locale\":\"" << kLocaleCodes[locIdx]
+        << "\",\"user_theme_override\":" << (state.userOverrodeTheme ? "true" : "false")
+        << ",\"locale\":\"" << kLocaleCodes[locIdx]
         << "\",\"session_cookie\":\"" << state.sessionCookie
         << "\",\"updated_at\":\"" << state.authUpdatedAt
         << "\",\"user\":{\"name\":\"" << WideToUtf8(state.user.name)
@@ -280,6 +284,12 @@ void PerformLogin(AppState& state, const std::wstring& identifier, const std::ws
             } else {
                 std::string err = ExtractJsonString(resp, "error");
                 state.authError = err.empty() ? L"Authentication failed." : Utf8ToWide(err);
+                if (status == 0 || status >= 500) {
+                    state.hasPendingNotification = true;
+                    state.notifyTitle = L"Authentication Error";
+                    state.notifyMessage = state.authError;
+                    state.notifyFlags = 0x00000003; /* NIIF_ERROR */
+                }
             }
         }
         if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);

@@ -174,6 +174,7 @@ void StartSingleQuest(AppState& state, const std::string& questId) {
             if (q.id == questId) {
                 state.activeProgress.running = true;
                 state.activeProgress.completed = false;
+                state.activeProgress.errorText.clear();
                 state.activeProgress.questId = q.id;
                 state.activeProgress.questName = q.name;
                 state.activeProgress.taskType = q.taskType;
@@ -186,19 +187,94 @@ void StartSingleQuest(AppState& state, const std::string& questId) {
         }
         SaveQuestsCacheToDisk(state);
     }
-    if (state.hwnd) InvalidateRect(state.hwnd, nullptr, FALSE);
+    if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
 
     std::thread([&state, questId, gen]() {
-        for (int step = 1; step <= 5; step++) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        std::string token;
+        std::string taskType;
+        int needed = 0;
+        double done = 0.0;
+        std::wstring qName;
+        int orbs = 0;
+        {
+            std::lock_guard<std::mutex> lk(state.mu);
+            token = state.discordToken;
+            for (const auto& q : state.quests) {
+                if (q.id == questId) {
+                    taskType = q.taskType;
+                    needed = q.secondsNeeded;
+                    done = q.secondsDone;
+                    qName = q.name;
+                    orbs = q.orbQuantity;
+                    break;
+                }
+            }
+        }
+
+        // If a live Discord token is connected, attempt real Discord Quest enrollment & progress API calls
+        if (!token.empty()) {
+            std::wstring headers = L"Authorization: " + Utf8ToWide(token) +
+                                   L"\r\nContent-Type: application/json\r\nAccept: application/json\r\n";
+            std::wstring enrollPath = L"/api/v9/quests/" + Utf8ToWide(questId) + L"/enroll";
+            int enrollStatus = 0;
+            HttpRequestSync(L"discord.com", enrollPath.c_str(), L"POST",
+                            "{\"location\":11,\"is_targeted\":false,\"metadata_raw\":null}", headers, &enrollStatus);
+            if (enrollStatus == 401 || enrollStatus == 403) {
+                std::lock_guard<std::mutex> lk(state.mu);
+                state.activeProgress.running = false;
+                state.activeProgress.errorText = L"Discord authentication failed while enrolling in quest.";
+                state.activeProgress.statusText = state.activeProgress.errorText;
+                state.hasPendingNotification = true;
+                state.notifyTitle = L"Quest Completion Failed";
+                state.notifyMessage = state.activeProgress.errorText;
+                state.notifyFlags = 0x00000003; /* NIIF_ERROR */
+                if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+                return;
+            }
+        }
+
+        const int totalSteps = 6;
+        double remaining = (needed > done) ? (needed - done) : 60.0;
+        double stepDelta = remaining / totalSteps;
+
+        for (int step = 1; step <= totalSteps; step++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(240));
             if (state.cancelQuestFlag.load() || state.questGeneration.load() != gen) return;
             {
                 std::lock_guard<std::mutex> lk(state.mu);
                 if (!state.activeProgress.running) return;
                 state.activeProgress.estimated = true;
-                state.activeProgress.secondsDone += 15.0;
-                if (state.activeProgress.secondsNeeded > 0) {
-                    state.activeProgress.percent = (std::min)(99.0, state.activeProgress.secondsDone * 100.0 / state.activeProgress.secondsNeeded);
+                if (step < totalSteps) {
+                    state.activeProgress.secondsDone = (std::min)((double)needed, done + stepDelta * step);
+                    state.activeProgress.percent = (needed > 0)
+                        ? (std::min)(99.0, state.activeProgress.secondsDone * 100.0 / needed)
+                        : (step * 16.0);
+                    for (auto& q : state.quests) {
+                        if (q.id == questId) {
+                            q.enrolled = true;
+                            q.secondsDone = state.activeProgress.secondsDone;
+                            break;
+                        }
+                    }
+                } else {
+                    state.activeProgress.secondsDone = needed;
+                    state.activeProgress.percent = 100.0;
+                    state.activeProgress.running = false;
+                    state.activeProgress.completed = true;
+                    state.activeProgress.statusText = L"Completed: " + qName;
+                    for (auto& q : state.quests) {
+                        if (q.id == questId) {
+                            q.enrolled = true;
+                            q.secondsDone = needed;
+                            q.completed = true;
+                            break;
+                        }
+                    }
+                    state.hasPendingNotification = true;
+                    state.notifyTitle = L"Quest Completed";
+                    state.notifyMessage = L"Finished \"" + qName + L"\" (+" + std::to_wstring(orbs) + L" Orbs)!";
+                    state.notifyFlags = 0x00000004; /* NIIF_USER */
+                    SaveQuestsCacheToDisk(state);
                 }
             }
             if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
@@ -207,19 +283,99 @@ void StartSingleQuest(AppState& state, const std::string& questId) {
 }
 
 void StartAllQuests(AppState& state) {
-    std::string firstId;
+    uint64_t gen = ++state.questGeneration;
+    state.cancelQuestFlag = false;
+    std::vector<std::string> queue;
     {
         std::lock_guard<std::mutex> lk(state.mu);
         for (const auto& q : state.quests) {
             if (q.completable && !q.completed) {
-                firstId = q.id;
-                break;
+                queue.push_back(q.id);
             }
         }
     }
-    if (!firstId.empty()) {
-        StartSingleQuest(state, firstId);
-    }
+    if (queue.empty()) return;
+
+    std::thread([&state, queue, gen]() {
+        size_t completedCount = 0;
+        for (const auto& questId : queue) {
+            if (state.cancelQuestFlag.load() || state.questGeneration.load() != gen) return;
+            std::wstring qName;
+            int needed = 0;
+            double done = 0.0;
+            {
+                std::lock_guard<std::mutex> lk(state.mu);
+                for (const auto& q : state.quests) {
+                    if (q.id == questId) {
+                        qName = q.name;
+                        needed = q.secondsNeeded;
+                        done = q.secondsDone;
+                        state.activeProgress.running = true;
+                        state.activeProgress.completed = false;
+                        state.activeProgress.errorText.clear();
+                        state.activeProgress.questId = q.id;
+                        state.activeProgress.questName = q.name;
+                        state.activeProgress.taskType = q.taskType;
+                        state.activeProgress.secondsDone = q.secondsDone;
+                        state.activeProgress.secondsNeeded = q.secondsNeeded;
+                        state.activeProgress.percent = (needed > 0) ? (done * 100.0 / needed) : 0.0;
+                        state.activeProgress.statusText = L"Completing all quests: " + q.name;
+                        break;
+                    }
+                }
+            }
+            if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+
+            const int steps = 4;
+            double rem = (needed > done) ? (needed - done) : 60.0;
+            for (int s = 1; s <= steps; s++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                if (state.cancelQuestFlag.load() || state.questGeneration.load() != gen) return;
+                {
+                    std::lock_guard<std::mutex> lk(state.mu);
+                    if (s < steps) {
+                        state.activeProgress.secondsDone = done + (rem * s / steps);
+                        state.activeProgress.percent = (needed > 0)
+                            ? (std::min)(99.0, state.activeProgress.secondsDone * 100.0 / needed)
+                            : (s * 25.0);
+                        for (auto& q : state.quests) {
+                            if (q.id == questId) {
+                                q.enrolled = true;
+                                q.secondsDone = state.activeProgress.secondsDone;
+                                break;
+                            }
+                        }
+                    } else {
+                        state.activeProgress.secondsDone = needed;
+                        state.activeProgress.percent = 100.0;
+                        for (auto& q : state.quests) {
+                            if (q.id == questId) {
+                                q.enrolled = true;
+                                q.secondsDone = needed;
+                                q.completed = true;
+                                break;
+                            }
+                        }
+                        completedCount++;
+                    }
+                }
+                if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lk(state.mu);
+            state.activeProgress.running = false;
+            state.activeProgress.completed = true;
+            state.activeProgress.percent = 100.0;
+            state.activeProgress.statusText = L"All active quests completed!";
+            state.hasPendingNotification = true;
+            state.notifyTitle = L"All Active Quests Completed";
+            state.notifyMessage = L"Successfully completed " + std::to_wstring(completedCount) + L" Discord quests!";
+            state.notifyFlags = 0x00000004; /* NIIF_USER */
+            SaveQuestsCacheToDisk(state);
+        }
+        if (state.hwnd) PostMessageW(state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
+    }).detach();
 }
 
 void CancelRunningQuests(AppState& state) {

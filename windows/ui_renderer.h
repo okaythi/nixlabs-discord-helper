@@ -36,6 +36,7 @@ enum TargetId {
      HIT_SNOWFLAKE_INPUT = 60,
      HIT_SNOWFLAKE_COPY_ISO = 61,
      HIT_SNOWFLAKE_COPY_BASE = 70, // 70..75
+     HIT_LOCALE_OPTION_BASE = 80,  // 80..85
      HIT_QUEST_START_BASE = 1000   // 1000 + index
 };
 
@@ -45,12 +46,14 @@ public:
     ~UiRenderer();
 
     bool Initialize(HWND hwnd);
+    void SetDpi(UINT dpi);
     void Resize(UINT width, UINT height);
     void Render(AppState& state);
     void DiscardResources();
 
 private:
     HWND m_hwnd = nullptr;
+    float m_dpi = 96.0f;
     ID2D1Factory* m_factory = nullptr;
     IDWriteFactory* m_dwrite = nullptr;
     ID2D1HwndRenderTarget* m_rt = nullptr;
