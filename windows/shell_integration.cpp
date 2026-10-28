@@ -299,9 +299,11 @@ void ApplyWindows11FrameAttributes(HWND hwnd, bool darkMode) {
     int backdropType = DWMSBT_MAINWINDOW; // Mica backdrop behind entire window including non-client title bar
     DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
 
-    // Extend DWM frame across client area so Direct2D transparent clear exposes real Windows 11 Mica
-    MARGINS margins = {-1, -1, -1, -1};
-    DwmExtendFrameIntoClientArea(hwnd, &margins);
+    // Tint the non-client caption and border to match our Mica surface seamlessly
+    COLORREF captionColor = darkMode ? RGB(30, 31, 32) : RGB(243, 246, 252);
+    COLORREF textColor = darkMode ? RGB(232, 234, 237) : RGB(32, 33, 36);
+    DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &captionColor, sizeof(captionColor));
+    DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &textColor, sizeof(textColor));
 
     InitUxThemeDarkMenus();
     if (s_pSetPreferredAppMode) {
@@ -486,8 +488,13 @@ static const PROPERTYKEY kPKEY_AppUserModel_ID = {
 };
 
 bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
+    // Ensure COM is initialized on the calling thread (whether UI thread or background worker thread)
+    HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     wchar_t exePath[MAX_PATH] = {0};
-    if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH)) return false;
+    if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH)) {
+        if (SUCCEEDED(hrCom)) CoUninitialize();
+        return false;
+    }
 
     std::wstring workDir = exePath;
     size_t lastSlash = workDir.find_last_of(L"\\/");
@@ -497,18 +504,25 @@ bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
 
     // 1. Create Start Menu Shortcut (%APPDATA%\Microsoft\Windows\Start Menu\Programs\Discord Helper.lnk)
     // with explicit PKEY_AppUserModel_ID for proper Windows 11 taskbar grouping, pinning, and notifications.
-    wchar_t startMenuDir[MAX_PATH] = {0};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, 0, startMenuDir))) {
-        std::wstring lnkPath = std::wstring(startMenuDir) + L"\\Discord Helper.lnk";
+    wchar_t appDataDir[MAX_PATH] = {0};
+    DWORD envLen = GetEnvironmentVariableW(L"APPDATA", appDataDir, MAX_PATH);
+    if (envLen == 0 || envLen >= MAX_PATH) {
+        SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appDataDir);
+    }
+    if (appDataDir[0] != L'\0') {
+        std::wstring programsDir = std::wstring(appDataDir) + L"\\Microsoft\\Windows\\Start Menu\\Programs";
+        CreateDirectoryW(programsDir.c_str(), nullptr);
+        std::wstring lnkPath = programsDir + L"\\Discord Helper.lnk";
         IShellLinkW* psl = nullptr;
-        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&psl)))) {
+        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                       IID_IShellLinkW, reinterpret_cast<void**>(&psl)))) {
             psl->SetPath(exePath);
             psl->SetWorkingDirectory(workDir.c_str());
             psl->SetDescription(L"Discord Quest Automator and Profile Companion");
             psl->SetIconLocation(exePath, 0);
 
             IPropertyStore* pps = nullptr;
-            if (SUCCEEDED(psl->QueryInterface(IID_PPV_ARGS(&pps)))) {
+            if (SUCCEEDED(psl->QueryInterface(IID_IPropertyStore, reinterpret_cast<void**>(&pps)))) {
                 PROPVARIANT pv;
                 PropVariantInit(&pv);
                 pv.vt = VT_LPWSTR;
@@ -519,7 +533,7 @@ bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
             }
 
             IPersistFile* ppf = nullptr;
-            if (SUCCEEDED(psl->QueryInterface(IID_PPV_ARGS(&ppf)))) {
+            if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&ppf)))) {
                 ppf->Save(lnkPath.c_str(), TRUE);
                 ppf->Release();
             }
@@ -563,13 +577,18 @@ bool RegisterStartMenuAndInstalledApp(HWND hwnd, bool showFeedback) {
                                L"Discord Helper is now registered in the Windows 11 Start menu and Installed Apps.",
                                NIIF_USER);
     }
+    if (SUCCEEDED(hrCom)) CoUninitialize();
     return true;
 }
 
 bool UnregisterStartMenuAndInstalledApp() {
-    wchar_t startMenuDir[MAX_PATH] = {0};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, 0, startMenuDir))) {
-        std::wstring lnkPath = std::wstring(startMenuDir) + L"\\Discord Helper.lnk";
+    wchar_t appDataDir[MAX_PATH] = {0};
+    DWORD envLen = GetEnvironmentVariableW(L"APPDATA", appDataDir, MAX_PATH);
+    if (envLen == 0 || envLen >= MAX_PATH) {
+        SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appDataDir);
+    }
+    if (appDataDir[0] != L'\0') {
+        std::wstring lnkPath = std::wstring(appDataDir) + L"\\Microsoft\\Windows\\Start Menu\\Programs\\Discord Helper.lnk";
         DeleteFileW(lnkPath.c_str());
     }
     RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NixlabsDiscordHelper");

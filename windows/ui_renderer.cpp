@@ -41,13 +41,13 @@ bool UiRenderer::EnsureTarget() {
     D2D1_SIZE_U sz = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
     D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
         m_dpi, m_dpi
     );
     if (FAILED(m_factory->CreateHwndRenderTarget(rtProps, D2D1::HwndRenderTargetProperties(m_hwnd, sz), &m_rt))) {
         return false;
     }
-    m_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    m_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
     m_rt->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_brush);
     return true;
 }
@@ -120,14 +120,11 @@ void UiRenderer::Render(AppState& state) {
     UINT32 fallbackBg = state.darkMode ? 0x1E1F20 : 0xF3F6FC;
 
     m_rt->BeginDraw();
-    // Clear with semi-transparent tint so real Windows 11 DWM Mica material shines through
-    // while retaining readable contrast even if transparency is disabled in Windows Settings.
-    float baseAlpha = state.darkMode ? 0.72f : 0.78f;
     m_rt->Clear(D2D1::ColorF(
         ((fallbackBg >> 16) & 0xFF) / 255.0f,
         ((fallbackBg >> 8) & 0xFF) / 255.0f,
         (fallbackBg & 0xFF) / 255.0f,
-        baseAlpha
+        1.0f
     ));
 
     if (!state.isAuthenticated) {

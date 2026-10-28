@@ -630,14 +630,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     ShellIntegration::InitializeTrayIcon(hwnd, hInstance);
     ShellIntegration::InitializeTaskbarList(hwnd);
 
-    // Load persisted state, validate session, and ensure Start Menu / Installed Apps registration off the UI thread
-    bool isBench = g_state.benchMode;
-    std::thread([isBench]() {
+    // Ensure Start Menu shortcut (.lnk with PKEY_AppUserModel_ID) & Installed Apps registration on STA thread
+    if (!g_state.benchMode) {
+        ShellIntegration::RegisterStartMenuAndInstalledApp(nullptr, false);
+    }
+
+    // Load persisted state and validate session asynchronously off the UI thread
+    std::thread([]() {
         ApiClient::LoadStateFromDisk(g_state);
         ApiClient::StartInitialSessionCheck(g_state);
-        if (!isBench) {
-            ShellIntegration::RegisterStartMenuAndInstalledApp(nullptr, false);
-        }
         if (g_state.hwnd) {
             PostMessageW(g_state.hwnd, WM_APP_STATE_UPDATED, 0, 0);
         }
