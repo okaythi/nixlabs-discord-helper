@@ -17,11 +17,17 @@ export interface DiscordLoginResult {
 }
 
 export async function getDiscordUser(forceRefresh = false): Promise<DiscordUser> {
-  return accountsRequest<DiscordUser>(
-    forceRefresh
-      ? '/api/third-party-auth/discord-helper/bot-profile?refresh=true'
-      : '/api/third-party-auth/discord-helper/bot-profile'
-  );
+  try {
+    return await apiRequest<DiscordUser>(
+      forceRefresh ? '/api/discord/user?refresh=true' : '/api/discord/user'
+    );
+  } catch {
+    return accountsRequest<DiscordUser>(
+      forceRefresh
+        ? '/api/third-party-auth/discord-helper/bot-profile?refresh=true'
+        : '/api/third-party-auth/discord-helper/bot-profile'
+    );
+  }
 }
 
 export async function loginDiscord(

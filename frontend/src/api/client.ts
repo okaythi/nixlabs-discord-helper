@@ -44,7 +44,7 @@ export async function accountsRequest<T>(endpoint: string, options: RequestInit 
 export function getWorkerBaseUrl(): string {
   if (typeof window === 'undefined') return 'https://api-helper.nixlabs.tech';
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://127.0.0.1:8080';
+    return window.location.origin;
   }
   return 'https://api-helper.nixlabs.tech';
 }
