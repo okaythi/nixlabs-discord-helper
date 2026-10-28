@@ -74,16 +74,19 @@ windows: frontend
 	@echo "==> Generating multi-resolution Windows 11 .ico and compiling resources..."
 	python3 windows/generate_ico.py
 	x86_64-w64-mingw32-windres windows/resource.rc -O coff -o windows/resource.o
-	@echo "==> Building native Windows 11 Direct2D app..."
+	@echo "==> Copying WebView2Loader.dll..."
+	cp windows/WebView2Loader.dll ./WebView2Loader.dll || true
+	@echo "==> Building native Windows 11 host app with WebView2..."
 	x86_64-w64-mingw32-g++-posix -O2 -s -std=c++17 -fno-rtti -ffunction-sections -fdata-sections -municode \
-		windows/main.cpp windows/api_client.cpp windows/quests_engine.cpp windows/ui_renderer.cpp windows/ui_views.cpp windows/shell_integration.cpp windows/image_cache.cpp windows/resource.o \
+		windows/main.cpp windows/shell_integration.cpp windows/resource.o \
+		-Iwindows -Iwindows/include \
 		-o nixlabs-discord-helper.exe \
 		-Wl,--gc-sections -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-		-ld2d1 -ldwrite -ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -lpropsys -lwindowscodecs -mwindows
+		-ldwmapi -lwinhttp -lgdi32 -lshell32 -lole32 -luuid -lpropsys -lcomctl32 -lshlwapi -lversion -mwindows
 
 install: deb
 	@echo "==> Installing $(DEB_NAME)..."
 	sudo dpkg -i $(DEB_NAME)
 
 clean:
-	rm -rf frontend/dist backend/nixlabs-discord-helper-bin backend/cmd/nixlabs-discord-helper/dist build $(DEB_NAME) *.exe
+	rm -rf frontend/dist backend/nixlabs-discord-helper-bin backend/cmd/nixlabs-discord-helper/dist build $(DEB_NAME) *.exe *.dll windows/*.o windows/app.ico

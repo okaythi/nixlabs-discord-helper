@@ -1,5 +1,4 @@
 #include "shell_integration.h"
-#include "api_client.h"
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shlobj.h>

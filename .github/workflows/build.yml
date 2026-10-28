@@ -80,7 +80,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
-          path: "*.exe"
+          path: |
+            *.exe
+            *.dll
 
   release:
     needs: package

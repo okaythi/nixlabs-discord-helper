@@ -7,5 +7,8 @@ build/
 *.deb
 *.exe
 *.log
-*.tsbuildinfo
+dist-win/
+*.dll
+!windows/WebView2Loader.dll
+*.o
 .DS_Store
