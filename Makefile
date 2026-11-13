@@ -16,7 +16,7 @@ backend: frontend
 	rm -rf backend/cmd/nixlabs-discord-helper/dist
 	cp -r frontend/dist backend/cmd/nixlabs-discord-helper/dist
 	@echo "==> Compiling Go binary..."
-	cd backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o nixlabs-discord-helper-bin ./cmd/nixlabs-discord-helper
+	cd backend && CGO_ENABLED=0 go build -ldflags="-s -w -X nixlabs-discord-helper/internal/config.Version=$(VERSION)" -o nixlabs-discord-helper-bin ./cmd/nixlabs-discord-helper
 
 icons:
 	@echo "==> Checking raster icons for tray & desktop..."

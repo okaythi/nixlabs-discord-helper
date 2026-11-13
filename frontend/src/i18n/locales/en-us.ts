@@ -136,4 +136,13 @@ export const enUS: Translations = {
   discordVerifying: "Verifying…",
   discordLoginFailed: "Failed to sign in to Discord. Check your credentials.",
   manageInMyAccount: "Manage token in My Account",
+
+  // App Updates
+  updateAvailableTitle: "A new update is available.",
+  updateVersionLabel: "Version {version}",
+  updateBtn: "Update",
+  remindMeLaterBtn: "Remind me later",
+  updateDownloading: "Downloading {percent}%",
+  updateInstalling: "Installing...",
+  doneBtn: "Done",
 };

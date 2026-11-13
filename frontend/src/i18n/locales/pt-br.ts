@@ -136,4 +136,13 @@ export const ptBR: Translations = {
   discordVerifying: "Verificando…",
   discordLoginFailed: "Falha ao entrar no Discord. Verifique suas credenciais.",
   manageInMyAccount: "Gerenciar token no Meu Perfil",
+
+  // App Updates
+  updateAvailableTitle: "Uma nova atualização está disponível.",
+  updateVersionLabel: "Versão {version}",
+  updateBtn: "Atualizar",
+  remindMeLaterBtn: "Lembrar mais tarde",
+  updateDownloading: "Baixando {percent}%",
+  updateInstalling: "Instalando...",
+  doneBtn: "Concluído",
 };

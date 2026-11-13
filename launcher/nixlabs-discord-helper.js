@@ -30,13 +30,69 @@ Gtk.StyleContext.add_provider_for_screen(
     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
 );
 
-// Find binary location
+function readBinaryVersion(path) {
+    try {
+        let [ok, stdout] = GLib.spawn_sync(
+            null,
+            [path, '-version'],
+            null,
+            GLib.SpawnFlags.STDERR_TO_DEV_NULL,
+            null
+        );
+        if (ok && stdout) {
+            return imports.byteArray.toString(stdout).trim();
+        }
+    } catch (e) {}
+    return '';
+}
+
+function compareSemver(a, b) {
+    let pa = (a || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+    let pb = (b || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+    let len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+        let va = pa[i] || 0;
+        let vb = pb[i] || 0;
+        if (va > vb) return 1;
+        if (va < vb) return -1;
+    }
+    return 0;
+}
+
+// Find binary location (preferring newer user-local self-updated binary if present)
 let binPath = '/usr/lib/nixlabs-discord-helper/nixlabs-discord-helper-bin';
 if (!GLib.file_test(binPath, GLib.FileTest.EXISTS)) {
     let currentDir = GLib.get_current_dir();
     let devBin = GLib.build_filenamev([currentDir, 'backend', 'nixlabs-discord-helper-bin']);
     if (GLib.file_test(devBin, GLib.FileTest.EXISTS)) {
         binPath = devBin;
+    }
+}
+
+let userDataDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'nixlabs-discord-helper']);
+let userBin = GLib.build_filenamev([userDataDir, 'nixlabs-discord-helper-bin']);
+let userVerFile = GLib.build_filenamev([userDataDir, 'version']);
+if (GLib.file_test(userBin, GLib.FileTest.IS_EXECUTABLE)) {
+    if (!GLib.file_test(binPath, GLib.FileTest.EXISTS)) {
+        binPath = userBin;
+    } else {
+        let sysVer = readBinaryVersion(binPath);
+        let userVer = '';
+        if (GLib.file_test(userVerFile, GLib.FileTest.EXISTS)) {
+            try {
+                let [ok, bytes] = GLib.file_get_contents(userVerFile);
+                if (ok) userVer = imports.byteArray.toString(bytes).trim();
+            } catch (e) {}
+        }
+        if (!userVer) {
+            userVer = readBinaryVersion(userBin);
+        }
+        if (userVer && (!sysVer || compareSemver(userVer, sysVer) > 0)) {
+            binPath = userBin;
+        } else if (sysVer && (!userVer || compareSemver(userVer, sysVer) <= 0)) {
+            try { GLib.unlink(userBin); } catch (e) {}
+            try { GLib.unlink(userVerFile); } catch (e) {}
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import { QuestsView } from './views/QuestsView';
 import { SnowflakesView } from './views/SnowflakesView';
 
 import { IosConnectionBanner } from './components/common/IosConnectionBanner';
+import { UpdateToast } from './components/common/UpdateToast';
 
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -34,6 +35,7 @@ function AppContent() {
           {activeTab === 'snowflakes' && <SnowflakesView />}
         </Shell>
       )}
+      <UpdateToast />
     </>
   );
 }

@@ -136,4 +136,13 @@ export const ja: Translations = {
   discordVerifying: "確認中…",
   discordLoginFailed: "Discord へのログインに失敗しました。認証情報を確認してください。",
   manageInMyAccount: "マイアカウントでトークンを管理",
+
+  // App Updates
+  updateAvailableTitle: "新しいアップデートが利用可能です。",
+  updateVersionLabel: "バージョン {version}",
+  updateBtn: "アップデート",
+  remindMeLaterBtn: "後で通知",
+  updateDownloading: "ダウンロード中 {percent}%",
+  updateInstalling: "インストール中...",
+  doneBtn: "完了",
 };

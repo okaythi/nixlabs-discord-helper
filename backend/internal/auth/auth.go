@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -102,41 +103,71 @@ func (m *Manager) GetSession(forceRefresh ...bool) (bool, map[string]interface{}
 		}
 	}
 
-	// Verify or refresh against accounts.nixlabs.tech if cookie is present
-	if a.SessionCookie != "" {
-		req, err := http.NewRequest("GET", config.AccountsAPIBase+"/api/profile", nil)
-		if err == nil {
-			req.Header.Set("Cookie", fmt.Sprintf("_nixlabs_session=%s", a.SessionCookie))
-			req.Header.Set("Accept", "application/json")
-			resp, rErr := m.client.Do(req)
-			if rErr == nil {
-				defer resp.Body.Close()
-				if resp.StatusCode == 200 {
-					var profileResp map[string]interface{}
-					if json.NewDecoder(resp.Body).Decode(&profileResp) == nil {
-						userObj, _ := profileResp["user"].(map[string]interface{})
-						if userObj == nil {
-							userObj, _ = profileResp["profile"].(map[string]interface{})
-						}
-						accObj, _ := profileResp["account"].(map[string]interface{})
-						now := time.Now().UTC()
-
-						m.Save(&StoredAuth{
-							SessionCookie: a.SessionCookie,
-							User:          userObj,
-							Account:       accObj,
-							UpdatedAt:     now.Format(time.RFC3339),
-							updatedAtTime: now,
-						})
-
-						return true, userObj, accObj
-					}
-				}
-			}
-		}
+	user, account, err := m.fetchProfile(a.SessionCookie)
+	if err != nil {
+		return false, nil, nil
 	}
+	now := time.Now().UTC()
+	m.Save(&StoredAuth{
+		SessionCookie: a.SessionCookie,
+		User:          user,
+		Account:       account,
+		UpdatedAt:     now.Format(time.RFC3339),
+		updatedAtTime: now,
+	})
+	return true, user, account
+}
 
-	return false, nil, nil
+func (m *Manager) fetchProfile(sessionCookie string) (map[string]interface{}, map[string]interface{}, error) {
+	req, err := http.NewRequest(http.MethodGet, config.AccountsAPIBase+"/api/profile", nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Cookie", "_nixlabs_session="+sessionCookie)
+	req.Header.Set("Accept", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not verify account session: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("could not verify account session (HTTP %d)", resp.StatusCode)
+	}
+	var profile map[string]interface{}
+	if json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&profile) != nil {
+		return nil, nil, errors.New("accounts service returned an invalid profile")
+	}
+	user, _ := profile["user"].(map[string]interface{})
+	if len(user) == 0 {
+		user, _ = profile["profile"].(map[string]interface{})
+	}
+	if len(user) == 0 {
+		return nil, nil, errors.New("accounts service did not return a user profile")
+	}
+	account, _ := profile["account"].(map[string]interface{})
+	return user, account, nil
+}
+
+// DiscordAccountRequest uses the backend's session for the account operations
+// allowlisted by the local server. Incoming browser credentials are not forwarded.
+func (m *Manager) DiscordAccountRequest(ctx context.Context, method, endpoint string, body io.Reader) (*http.Response, error) {
+	m.mu.RLock()
+	a := m.auth
+	m.mu.RUnlock()
+	if a == nil || a.SessionCookie == "" {
+		return nil, ErrNotAuthenticated
+	}
+	req, err := http.NewRequestWithContext(ctx, method, config.AccountsAPIBase+endpoint, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cookie", "_nixlabs_session="+a.SessionCookie)
+	req.Header.Set("Authorization", "Bearer "+a.SessionCookie)
+	req.Header.Set("Accept", "application/json")
+	if method == http.MethodPut {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return m.client.Do(req)
 }
 
 // GetDiscordToken verifies the live Nixlabs session before explicitly requesting
@@ -272,7 +303,7 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Nixlabs-Client", "discord-helper")
-	req.Header.Set("X-Nixlabs-Client-Version", "1.0.13")
+	req.Header.Set("X-Nixlabs-Client-Version", config.Version)
 	req.Header.Set("X-Request-ID", fmt.Sprintf("dh-%d", time.Now().UnixNano()))
 
 	resp, err := m.client.Do(req)
@@ -281,7 +312,10 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, nil, errors.New("could not read the accounts login response")
+	}
 	if resp.StatusCode != 200 {
 		var errData map[string]string
 		_ = json.Unmarshal(bodyBytes, &errData)
@@ -295,7 +329,24 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 		return nil, nil, fmt.Errorf("authentication failed (HTTP %d; request %s)", resp.StatusCode, requestID)
 	}
 
-	// Extract session cookie
+	var loginResponse struct {
+		Success           bool   `json:"success"`
+		Error             string `json:"error"`
+		MigrationRequired bool   `json:"migrationRequired"`
+	}
+	if json.Unmarshal(bodyBytes, &loginResponse) != nil {
+		return nil, nil, errors.New("accounts service returned an invalid login response")
+	}
+	if !loginResponse.Success {
+		if loginResponse.Error != "" {
+			return nil, nil, errors.New(loginResponse.Error)
+		}
+		return nil, nil, errors.New("authentication failed")
+	}
+	if loginResponse.MigrationRequired {
+		return nil, nil, errors.New("complete your account setup at accounts.nixlabs.tech before signing in")
+	}
+
 	var sessionCookie string
 	for _, cookie := range resp.Cookies() {
 		if cookie.Name == "_nixlabs_session" {
@@ -304,34 +355,15 @@ func (m *Manager) LoginInApp(identifier, password string) (map[string]interface{
 		}
 	}
 	if sessionCookie == "" {
-		sc := resp.Header.Get("Set-Cookie")
-		if idx := strings.Index(sc, "_nixlabs_session="); idx != -1 {
-			val := sc[idx+len("_nixlabs_session="):]
-			if semi := strings.Index(val, ";"); semi != -1 {
-				val = val[:semi]
-			}
-			sessionCookie = val
-		}
+		return nil, nil, errors.New("accounts service did not establish a session; please try signing in again")
 	}
 
-	// Fetch user profile with session cookie
-	var userProfile map[string]interface{}
-	var accountData map[string]interface{}
-	if sessionCookie != "" {
-		pReq, _ := http.NewRequest("GET", config.AccountsAPIBase+"/api/profile", nil)
-		pReq.Header.Set("Cookie", fmt.Sprintf("_nixlabs_session=%s", sessionCookie))
-		pResp, pErr := m.client.Do(pReq)
-		if pErr == nil {
-			defer pResp.Body.Close()
-			var pr map[string]interface{}
-			if json.NewDecoder(pResp.Body).Decode(&pr) == nil {
-				userProfile, _ = pr["user"].(map[string]interface{})
-				if userProfile == nil {
-					userProfile, _ = pr["profile"].(map[string]interface{})
-				}
-				accountData, _ = pr["account"].(map[string]interface{})
-			}
-		}
+	userProfile, accountData, err := m.fetchProfile(sessionCookie)
+	if err != nil {
+		return nil, nil, err
+	}
+	if banned, _ := accountData["banned"].(bool); banned {
+		return nil, nil, errors.New("this account has been suspended or banned")
 	}
 
 	now := time.Now().UTC()

@@ -1,7 +1,20 @@
 const ACCOUNTS_BASE_URL = 'https://accounts.nixlabs.tech';
 
+function getLocalServiceOrigin(): string | null {
+  if (typeof window === 'undefined') return null;
+  const { protocol, hostname, origin } = window.location;
+  return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1')
+    ? origin
+    : null;
+}
+
 export async function accountsRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${ACCOUNTS_BASE_URL}${endpoint}`;
+  // The desktop backend keeps the Accounts cookie. WebKit cannot retain that
+  // cross-site cookie when the application is served from a loopback address.
+  const localOrigin = getLocalServiceOrigin();
+  const url = localOrigin
+    ? `${localOrigin}/api/accounts${endpoint.slice('/api'.length)}`
+    : `${ACCOUNTS_BASE_URL}${endpoint}`;
   const headers = new Headers(options.headers || {});
   if (options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
@@ -42,11 +55,7 @@ export async function accountsRequest<T>(endpoint: string, options: RequestInit 
 }
 
 export function getWorkerBaseUrl(): string {
-  if (typeof window === 'undefined') return 'https://api-helper.nixlabs.tech';
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return window.location.origin;
-  }
-  return 'https://api-helper.nixlabs.tech';
+  return getLocalServiceOrigin() || 'https://api-helper.nixlabs.tech';
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

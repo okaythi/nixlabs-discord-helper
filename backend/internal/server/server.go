@@ -13,23 +13,32 @@ import (
 
 	"nixlabs-discord-helper/internal/auth"
 	"nixlabs-discord-helper/internal/quests"
+	"nixlabs-discord-helper/internal/updater"
 )
 
 type Server struct {
 	port                 int
 	authMgr              *auth.Manager
 	questEngine          *quests.Engine
+	updateMgr            *updater.Manager
 	questStartMu         sync.Mutex
 	questStartGeneration uint64
 	distFS               fs.FS
 	httpServer           *http.Server
 }
 
-func NewServer(port int, authMgr *auth.Manager, questEngine *quests.Engine, distFS fs.FS) *Server {
+func NewServer(port int, authMgr *auth.Manager, questEngine *quests.Engine, distFS fs.FS, updateMgr ...*updater.Manager) *Server {
+	var um *updater.Manager
+	if len(updateMgr) > 0 && updateMgr[0] != nil {
+		um = updateMgr[0]
+	} else {
+		um = updater.NewManager()
+	}
 	return &Server{
 		port:        port,
 		authMgr:     authMgr,
 		questEngine: questEngine,
+		updateMgr:   um,
 		distFS:      distFS,
 	}
 }
@@ -44,6 +53,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/auth/register-url", s.handleRegisterURL)
 	mux.HandleFunc("/api/auth/open-browser", s.handleOpenBrowser)
 	mux.HandleFunc("/auth/callback", s.handleAuthCallbackPage)
+	// Desktop requests share the backend's persisted Accounts session rather
+	// than depending on third-party cookies in the local WebKit window.
+	mux.HandleFunc("/api/accounts/session", s.handleSession)
+	mux.HandleFunc("/api/accounts/login", s.handleLogin)
+	mux.HandleFunc("/api/accounts/logout", s.handleLogout)
+	mux.HandleFunc("/api/accounts/third-party-auth/discord-helper/", s.handleAccountsDiscord)
 
 	// ── Discord & Quests Endpoints ──
 	mux.HandleFunc("/api/discord/user", s.handleDiscordUser)
@@ -54,6 +69,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/quests/cancel", s.handleQuestCancel)
 	mux.HandleFunc("/api/quests/events", s.handleQuestEvents)
 	mux.HandleFunc("/api/quests/progress", s.handleQuestProgress)
+
+	// ── App Self-Update Endpoints ──
+	mux.HandleFunc("/api/update/status", s.handleUpdateStatus)
+	mux.HandleFunc("/api/update/start", s.handleUpdateStart)
+	mux.HandleFunc("/api/update/dismiss", s.handleUpdateDismiss)
+	mux.HandleFunc("/api/update/events", s.handleUpdateEvents)
 
 	// ── SPA Static Assets with HTML5 History Fallback ──
 	fileServer := http.FileServer(http.FS(s.distFS))

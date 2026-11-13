@@ -83,7 +83,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!res.success) {
       throw new Error(res.error || 'Authentication failed');
     }
-    await refreshSession();
+    if (res.migrationRequired) {
+      throw new Error('Complete your account setup at accounts.nixlabs.tech before signing in.');
+    }
+    const session = await checkSession();
+    if (!session.authenticated || !session.user) {
+      throw new Error('Sign-in succeeded, but the account session could not be established. Please try again.');
+    }
+    if (session.account?.banned) {
+      throw new Error('This account has been suspended or banned.');
+    }
+    setUser(session.user);
+    setAccount(session.account || null);
+    setIsAuthenticated(true);
+    setIsDisconnected(false);
   };
 
   const createAccountInBrowser = async (): Promise<string> => {

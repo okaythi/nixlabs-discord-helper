@@ -140,4 +140,13 @@ export const frBE: Translations = {
   discordVerifying: "Vérification en cours…",
   discordLoginFailed: "Échec de la connexion à Discord. Vérifiez vos identifiants.",
   manageInMyAccount: "Gérer le jeton dans Mon compte",
+
+  // App Updates
+  updateAvailableTitle: "Une nouvelle mise à jour est disponible.",
+  updateVersionLabel: "Version {version}",
+  updateBtn: "Mettre à jour",
+  remindMeLaterBtn: "Me le rappeler plus tard",
+  updateDownloading: "Téléchargement {percent}%",
+  updateInstalling: "Installation...",
+  doneBtn: "Terminé",
 };

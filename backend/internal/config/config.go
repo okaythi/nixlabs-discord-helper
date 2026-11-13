@@ -8,10 +8,14 @@ import (
 )
 
 const (
-	DiscordAPIBase     = "https://discord.com/api/v9"
-	AccountsAPIBase    = "https://accounts.nixlabs.tech"
-	DefaultBuildNumber = 504649
+	DiscordAPIBase         = "https://discord.com/api/v9"
+	AccountsAPIBase        = "https://accounts.nixlabs.tech"
+	DefaultBuildNumber     = 504649
+	GitHubLatestReleaseURL = "https://api.github.com/repos/okaythi/nixlabs-discord-helper/releases/latest"
 )
+
+// Version is set at build time via -ldflags; defaults to the current release version.
+var Version = "1.0.14"
 
 var (
 	dirMu   sync.Mutex
@@ -46,6 +50,19 @@ func GetConfigDir() string {
 		_ = os.MkdirAll(dir, 0700)
 		_ = os.Chmod(dir, 0700)
 	}
+	return dir
+}
+
+// GetDataDir returns ~/.local/share/nixlabs-discord-helper respecting XDG specs.
+func GetDataDir() string {
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if dataHome == "" {
+		home, _ := os.UserHomeDir()
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	dir := filepath.Join(dataHome, "nixlabs-discord-helper")
+	_ = os.MkdirAll(dir, 0700)
+	_ = os.Chmod(dir, 0700)
 	return dir
 }
 

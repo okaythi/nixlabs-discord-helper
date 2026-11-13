@@ -9,6 +9,17 @@ export default defineConfig({
     sourcemap: false
   },
   server: {
-    port: 3000
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:45731',
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Origin', 'http://127.0.0.1:45731');
+          });
+        },
+      },
+    },
   }
 });
