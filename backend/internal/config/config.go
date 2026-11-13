@@ -15,7 +15,7 @@ const (
 )
 
 // Version is set at build time via -ldflags; defaults to the current release version.
-var Version = "1.0.14"
+var Version = "1.0.15"
 
 var (
 	dirMu   sync.Mutex
